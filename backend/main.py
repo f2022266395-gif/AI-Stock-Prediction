@@ -1,7 +1,8 @@
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
-from models import db, User, Stock, Portfolio, Transaction
+from models import db, User, Stock, Portfolio, Transaction, Holding, PriceHistory, Badge
 import os
+from decimal import Decimal
 
 app = Flask(__name__, static_folder='../frontend')
 CORS(app)
@@ -16,21 +17,32 @@ db.init_app(app)
 # Initialize Database
 with app.app_context():
     db.create_all()
+    
     # Add some mock stocks if the table is empty
     if Stock.query.count() == 0:
         stocks = [
-            Stock(symbol='AAPL', name='Apple Inc.', current_price=175.50),
-            Stock(symbol='GOOGL', name='Alphabet Inc.', current_price=140.20),
-            Stock(symbol='TSLA', name='Tesla, Inc.', current_price=240.10),
-            Stock(symbol='MSFT', name='Microsoft Corporation', current_price=330.40),
-            Stock(symbol='AMZN', name='Amazon.com, Inc.', current_price=135.60)
+            Stock(ticker='AAPL', company_name='Apple Inc.', latest_price=175.50, sector='Technology'),
+            Stock(ticker='GOOGL', company_name='Alphabet Inc.', latest_price=140.20, sector='Technology'),
+            Stock(ticker='TSLA', company_name='Tesla, Inc.', latest_price=240.10, sector='Automotive'),
+            Stock(ticker='MSFT', company_name='Microsoft Corporation', latest_price=330.40, sector='Technology'),
+            Stock(ticker='AMZN', company_name='Amazon.com, Inc.', latest_price=135.60, sector='Consumer Cyclical')
         ]
         db.session.bulk_save_objects(stocks)
         
     # Add a mock user if empty
     if User.query.count() == 0:
-        user = User(username='trader1', email='trader@example.com', password_hash='hashed_pass')
+        user = User(
+            username='trader1', 
+            email='trader@example.com', 
+            password_hash='hashed_pass', 
+            virtual_balance=10000.00
+        )
         db.session.add(user)
+        db.session.commit()
+        
+        # Initialize Portfolio for the user
+        portfolio = Portfolio(user_id=user.user_id, cash_balance=10000.00)
+        db.session.add(portfolio)
     
     db.session.commit()
 
@@ -40,27 +52,27 @@ with app.app_context():
 def get_stocks():
     stocks = Stock.query.all()
     return jsonify([{
-        'symbol': s.symbol,
-        'name': s.name,
-        'price': s.current_price
+        'symbol': s.ticker, # Keeping key names same for frontend compatibility where possible
+        'name': s.company_name,
+        'price': float(s.latest_price)
     } for s in stocks])
 
 @app.route('/api/portfolio/<int:user_id>', methods=['GET'])
 def get_portfolio(user_id):
-    portfolio = Portfolio.query.filter_by(user_id=user_id).all()
+    holdings = Holding.query.filter_by(user_id=user_id).all()
     return jsonify([{
-        'symbol': p.stock_symbol,
-        'quantity': p.quantity,
-        'avg_price': p.average_price
-    } for p in portfolio])
+        'symbol': h.stock.ticker,
+        'quantity': h.quantity,
+        'avg_price': float(h.avg_buy_price)
+    } for h in holdings])
 
 @app.route('/api/user/<int:user_id>', methods=['GET'])
 def get_user(user_id):
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if user:
         return jsonify({
             'username': user.username,
-            'balance': user.balance
+            'balance': float(user.virtual_balance)
         })
     return jsonify({'error': 'User not found'}), 404
 
