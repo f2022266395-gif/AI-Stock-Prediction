@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from models import db, User, Stock, Portfolio, Holding
+from models import db, User, Stock, Portfolio, Holding, Transaction
 from werkzeug.security import generate_password_hash, check_password_hash
 
 api_bp = Blueprint('api', __name__)
@@ -81,3 +81,74 @@ def get_portfolio(user_id):
         'quantity': h.quantity,
         'avg_price': float(h.avg_buy_price)
     } for h in holdings])
+
+@api_bp.route('/user/update/<int:user_id>', methods=['PUT'])
+def update_profile(user_id):
+    data = request.get_json()
+    user = db.session.get(User, user_id)
+    
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+        
+    if data.get('username') and data['username'] != user.username:
+        if User.query.filter_by(username=data['username']).first():
+            return jsonify({'error': 'Username already taken'}), 400
+        user.username = data['username']
+        
+    if data.get('email') and data['email'] != user.email:
+        if User.query.filter_by(email=data['email']).first():
+            return jsonify({'error': 'Email already taken'}), 400
+        user.email = data['email']
+        
+    if data.get('full_name'):
+        user.full_name = data['full_name']
+        
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Profile updated successfully',
+        'user_id': user.user_id,
+        'username': user.username,
+        'full_name': user.full_name,
+        'balance': float(user.virtual_balance)
+    })
+
+@api_bp.route('/user/update-password/<int:user_id>', methods=['PUT'])
+def update_password(user_id):
+    data = request.get_json()
+    user = db.session.get(User, user_id)
+    
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+        
+    current_password = data.get('current_password')
+    new_password = data.get('new_password')
+    
+    if not current_password or not new_password:
+        return jsonify({'error': 'Missing required fields'}), 400
+        
+    if not check_password_hash(user.password_hash, current_password):
+        return jsonify({'error': 'Incorrect current password'}), 401
+        
+    user.password_hash = generate_password_hash(new_password)
+    db.session.commit()
+    
+    return jsonify({'message': 'Password updated successfully'})
+
+@api_bp.route('/user/delete/<int:user_id>', methods=['DELETE'])
+def delete_account(user_id):
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+        
+    # Delete associated data first (SQLAlchemy handles this if cascade is set, but better safe)
+    # Portfolio, holdings, transactions are linked to user_id
+    from models import Portfolio, Holding, Transaction
+    Portfolio.query.filter_by(user_id=user_id).delete()
+    Holding.query.filter_by(user_id=user_id).delete()
+    Transaction.query.filter_by(user_id=user_id).delete()
+    
+    db.session.delete(user)
+    db.session.commit()
+    
+    return jsonify({'message': 'Account deleted successfully'})

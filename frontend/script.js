@@ -31,11 +31,16 @@ function showView(viewId) {
     const target = document.getElementById(viewId);
     if (target) {
         target.classList.add('active');
-        // If switching to dashboard, fetch data
+        // View-specific data loading
         if (viewId === 'dashboard-view') {
             fetchStocks();
             if (currentUser) fetchPortfolio();
+        } else if (viewId === 'profile-view') {
+            loadProfileData();
         }
+        
+        // Update active tab highlighting
+        setActiveTab(viewId);
     }
     // Update navbar state
     updateNavbar();
@@ -45,12 +50,15 @@ function showView(viewId) {
 function updateNavbar() {
     const guestNav = document.getElementById('guest-nav');
     const userNav = document.getElementById('user-nav');
+    const mainTabs = document.getElementById('main-nav-tabs');
     
     if (currentUser) {
         guestNav.classList.add('hidden');
         userNav.classList.remove('hidden');
-        document.getElementById('nav-user-balance').textContent = `$${currentUser.balance.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+        mainTabs.classList.remove('hidden');
+        
         document.getElementById('nav-user-initials').textContent = getInitials(currentUser.full_name || currentUser.username);
+        document.getElementById('nav-user-full-name').textContent = currentUser.full_name || currentUser.username;
         
         // Update dashboard welcome name
         const welcomeName = document.getElementById('user-full-name');
@@ -58,7 +66,18 @@ function updateNavbar() {
     } else {
         guestNav.classList.remove('hidden');
         userNav.classList.add('hidden');
+        mainTabs.classList.add('hidden');
     }
+}
+
+function setActiveTab(viewId) {
+    document.querySelectorAll('.tab-item').forEach(tab => {
+        if (tab.getAttribute('data-tab') === viewId) {
+            tab.classList.add('active');
+        } else {
+            tab.classList.remove('active');
+        }
+    });
 }
 
 function getInitials(name) {
@@ -90,8 +109,9 @@ async function handleRegister(e) {
         });
         const data = await response.json();
         if (response.ok) {
+            e.target.reset();
             showView('auth-login');
-            // Show success message or just switch to login
+            showToast('Registration successful! Please login.');
         } else {
             showError(errorEl, data.error || "Registration failed");
         }
@@ -116,6 +136,7 @@ async function handleLogin(e) {
         });
         const data = await response.json();
         if (response.ok) {
+            e.target.reset();
             currentUser = data;
             localStorage.setItem('user_id', data.user_id);
             showToast('Login successful! Welcome back.');
@@ -148,6 +169,100 @@ async function checkAuth() {
         } catch (e) {
             console.error("Auth check failed");
         }
+    }
+}
+
+// --- Profile Management ---
+function loadProfileData() {
+    if (!currentUser) return;
+    document.getElementById('profile-fullname').value = currentUser.full_name || '';
+    document.getElementById('profile-username').value = currentUser.username || '';
+    document.getElementById('profile-email').value = currentUser.email || '';
+}
+
+async function handleProfileUpdate(e) {
+    e.preventDefault();
+    const errorEl = document.getElementById('profile-error');
+    errorEl.classList.add('hidden');
+
+    const fullName = document.getElementById('profile-fullname').value;
+    const username = document.getElementById('profile-username').value;
+    const email = document.getElementById('profile-email').value;
+
+    try {
+        const response = await fetch(`${API_BASE}/user/update/${currentUser.user_id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ full_name: fullName, username, email })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            currentUser = data; // Update local state
+            updateNavbar();
+            showToast('Profile updated successfully!');
+        } else {
+            showError(errorEl, data.error || 'Update failed');
+        }
+    } catch (error) {
+        showError(errorEl, 'Connection error');
+    }
+}
+
+async function handlePasswordUpdate(e) {
+    e.preventDefault();
+    const errorEl = document.getElementById('password-error');
+    errorEl.classList.add('hidden');
+
+    const currentPassword = document.getElementById('pass-current').value;
+    const newPassword = document.getElementById('pass-new').value;
+    const confirmPassword = document.getElementById('pass-confirm').value;
+
+    if (newPassword !== confirmPassword) {
+        showError(errorEl, 'New passwords do not match');
+        return;
+    }
+
+    if (newPassword.length < 8) {
+        showError(errorEl, 'New password must be at least 8 characters');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/user/update-password/${currentUser.user_id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            e.target.reset();
+            showToast('Password updated successfully!');
+        } else {
+            showError(errorEl, data.error || 'Update failed');
+        }
+    } catch (error) {
+        showError(errorEl, 'Connection error');
+    }
+}
+
+async function handleAccountDeactivate() {
+    const confirmed = confirm('Are you absolutely sure? This will permanently delete your account and all trading data.');
+    if (!confirmed) return;
+
+    try {
+        const response = await fetch(`${API_BASE}/user/delete/${currentUser.user_id}`, {
+            method: 'DELETE'
+        });
+        if (response.ok) {
+            showToast('Account successfully deactivated.', 'error');
+            setTimeout(() => {
+                logout();
+            }, 2000);
+        } else {
+            alert('Failed to deactivate account.');
+        }
+    } catch (error) {
+        alert('Connection error');
     }
 }
 
@@ -234,6 +349,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     document.getElementById('login-form')?.addEventListener('submit', handleLogin);
     document.getElementById('register-form')?.addEventListener('submit', handleRegister);
+    document.getElementById('profile-form')?.addEventListener('submit', handleProfileUpdate);
+    document.getElementById('password-form')?.addEventListener('submit', handlePasswordUpdate);
     
     // Initialize icons
     if (window.lucide) lucide.createIcons();
