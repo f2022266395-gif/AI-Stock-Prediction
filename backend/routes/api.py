@@ -28,14 +28,22 @@ def register():
     db.session.commit()
     return jsonify({'message': 'User registered successfully', 'user_id': new_user.user_id}), 201
 
+from sqlalchemy import or_
+
 @api_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
-    if not data or not data.get('username') or not data.get('password'):
-        return jsonify({'error': 'Missing username or password'}), 400
-    user = User.query.filter_by(username=data['username']).first()
-    if not user or not check_password_hash(user.password_hash, data['password']):
-        return jsonify({'error': 'Invalid username or password'}), 401
+    # Accept 'username' key from frontend but check it against both username and email columns
+    identity = data.get('username')
+    password = data.get('password')
+    
+    if not data or not identity or not password:
+        return jsonify({'error': 'Missing credentials'}), 400
+        
+    user = User.query.filter(or_(User.username == identity, User.email == identity)).first()
+    
+    if not user or not check_password_hash(user.password_hash, password):
+        return jsonify({'error': 'Invalid credentials'}), 401
     return jsonify({
         'message': 'Login successful',
         'user_id': user.user_id,

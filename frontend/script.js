@@ -1,6 +1,28 @@
 const API_BASE = 'http://localhost:5000/api';
 let currentUser = null;
 
+// --- UI Components ---
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
+    const icon = type === 'success' ? 'check-circle' : 'alert-circle';
+    toast.innerHTML = `
+        <i data-lucide="${icon}"></i>
+        <span>${message}</span>
+    `;
+    
+    container.appendChild(toast);
+    lucide.createIcons();
+
+    // Remove after 3 seconds
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease forwards';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
 // --- View Management ---
 function showView(viewId) {
     document.querySelectorAll('.view').forEach(view => {
@@ -29,6 +51,10 @@ function updateNavbar() {
         userNav.classList.remove('hidden');
         document.getElementById('nav-user-balance').textContent = `$${currentUser.balance.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
         document.getElementById('nav-user-initials').textContent = getInitials(currentUser.full_name || currentUser.username);
+        
+        // Update dashboard welcome name
+        const welcomeName = document.getElementById('user-full-name');
+        if (welcomeName) welcomeName.textContent = currentUser.full_name || currentUser.username;
     } else {
         guestNav.classList.remove('hidden');
         userNav.classList.add('hidden');
@@ -92,6 +118,7 @@ async function handleLogin(e) {
         if (response.ok) {
             currentUser = data;
             localStorage.setItem('user_id', data.user_id);
+            showToast('Login successful! Welcome back.');
             showView('dashboard-view');
         } else {
             showError(errorEl, data.error || "Login failed");

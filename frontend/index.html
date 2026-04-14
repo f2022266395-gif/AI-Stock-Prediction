@@ -14,6 +14,9 @@
         <div class="blob blob-2"></div>
     </div>
 
+    <!-- Toast Notification -->
+    <div id="toast-container" class="toast-container"></div>
+
     <!-- Navigation Bar -->
     <nav class="navbar">
         <div class="logo">
@@ -111,10 +114,10 @@
             </div>
             <form id="login-form" class="auth-form">
                 <div class="form-group">
-                    <label>Username</label>
+                    <label>Username or Email</label>
                     <div class="input-container">
                         <i data-lucide="user"></i>
-                        <input type="text" id="login-username" placeholder="Enter your username" required>
+                        <input type="text" id="login-username" placeholder="Enter username or email" required>
                     </div>
                 </div>
                 <div class="form-group">
@@ -198,6 +201,7 @@
         <div class="dashboard-container">
             <header class="dashboard-header">
                 <div>
+                    <h2 class="welcome-label">Welcome on Dashboard, <span id="user-full-name">User</span>!</h2>
                     <h1>Market Overview</h1>
                     <p>Track your portfolio and simulate trades in real-time.</p>
                 </div>

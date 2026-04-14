@@ -161,9 +161,48 @@ body {
 .auth-link a { color: var(--accent-color); text-decoration: none; font-weight: 600; }
 .error-msg { background: rgba(218, 54, 51, 0.1); color: var(--danger); padding: 0.8rem; border-radius: 8px; font-size: 0.85rem; border: 1px solid rgba(218, 54, 51, 0.2); }
 
+/* Toast Notifications */
+.toast-container {
+    position: fixed;
+    top: 2rem;
+    right: 2rem;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.toast {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    color: white;
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    animation: slideIn 0.3s ease forwards;
+    min-width: 300px;
+}
+
+.toast.success { border-left: 4px solid var(--success); }
+.toast.error { border-left: 4px solid var(--danger); }
+
+@keyframes slideIn {
+    from { transform: translateX(120%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideOut {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(120%); opacity: 0; }
+}
+
 /* Dashboard Styles */
 .dashboard-page { padding: 2rem 10%; }
 .dashboard-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 3rem; }
+.welcome-label { color: var(--accent-color); font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; opacity: 0.9; }
 .dashboard-header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
 .dashboard-header p { color: var(--text-secondary); }
 .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
