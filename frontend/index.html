@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StockSim | AI-Powered Investment Simulation</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+
+    <nav class="navbar">
+        <div class="logo">Stock<span>Sim</span></div>
+        <div class="user-profile">
+            <span id="user-balance">$10,000.00</span>
+            <div class="avatar">HB</div>
+        </div>
+    </nav>
+
+    <main class="dashboard">
+        <header class="dashboard-header">
+            <h1>Market Overview</h1>
+            <p>Track your portfolio and simulate trades in real-time.</p>
+        </header>
+
+        <section class="main-grid">
+            <div class="card market-trends">
+                <h2>Trending Stocks</h2>
+                <div id="stock-list" class="stock-list">
+                    <!-- Stocks will be loaded here -->
+                    <div class="loading-shimmer"></div>
+                </div>
+            </div>
+
+            <div class="card portfolio-overview">
+                <h2>Your Portfolio</h2>
+                <div id="portfolio-list" class="portfolio-list">
+                    <p class="empty-msg">No holdings yet. Start trading!</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
+ Lancaster
