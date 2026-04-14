@@ -1,5 +1,6 @@
 const API_BASE = 'http://localhost:5000/api';
 let currentUser = null;
+let performanceChart = null;
 
 // --- UI Components ---
 function showToast(message, type = 'success') {
@@ -16,7 +17,6 @@ function showToast(message, type = 'success') {
     container.appendChild(toast);
     lucide.createIcons();
 
-    // Remove after 3 seconds
     setTimeout(() => {
         toast.style.animation = 'slideOut 0.3s ease forwards';
         setTimeout(() => toast.remove(), 300);
@@ -24,26 +24,21 @@ function showToast(message, type = 'success') {
 }
 
 // --- View Management ---
-function showView(viewId) {
+async function showView(viewId) {
     document.querySelectorAll('.view').forEach(view => {
         view.classList.remove('active');
     });
     const target = document.getElementById(viewId);
     if (target) {
         target.classList.add('active');
-        // View-specific data loading
         if (viewId === 'dashboard-view') {
-            fetchStocks();
-            if (currentUser) fetchPortfolio();
+            await initDashboard();
         } else if (viewId === 'profile-view') {
             loadProfileData();
         }
-        
-        // Update active tab highlighting
-        setActiveTab(viewId);
     }
-    // Update navbar state
     updateNavbar();
+    setActiveTab(viewId);
     window.scrollTo(0, 0);
 }
 
@@ -60,9 +55,8 @@ function updateNavbar() {
         document.getElementById('nav-user-initials').textContent = getInitials(currentUser.full_name || currentUser.username);
         document.getElementById('nav-user-full-name').textContent = currentUser.full_name || currentUser.username;
         
-        // Update dashboard welcome name
-        const welcomeName = document.getElementById('user-full-name');
-        if (welcomeName) welcomeName.textContent = currentUser.full_name || currentUser.username;
+        const welcomeTitle = document.getElementById('dash-welcome');
+        if (welcomeTitle) welcomeTitle.textContent = `Welcome back, ${currentUser.full_name.split(' ')[0]}`;
     } else {
         guestNav.classList.remove('hidden');
         userNav.classList.add('hidden');
@@ -82,6 +76,196 @@ function setActiveTab(viewId) {
 
 function getInitials(name) {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+}
+
+// --- Dashboard Logic ---
+async function initDashboard() {
+    if (!currentUser) return;
+    
+    // Update date
+    const now = new Date();
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+    document.getElementById('dash-date').textContent = now.toLocaleDateString('en-US', options);
+
+    try {
+        await Promise.all([
+            fetchDashboardSummary(),
+            fetchRecentTransactions(),
+            fetchPortfolioData(),
+            fetchMarketOverview()
+        ]);
+        renderPerformanceChart();
+    } catch (error) {
+        console.error("Error initializing dashboard:", error);
+    }
+}
+
+async function fetchDashboardSummary() {
+    const response = await fetch(`${API_BASE}/dashboard-summary/${currentUser.user_id}`);
+    const data = await response.json();
+    
+    const balanceStr = `$${data.virtual_balance.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+    document.getElementById('dash-widget-balance').textContent = balanceStr;
+    document.getElementById('metric-balance').textContent = balanceStr;
+    document.getElementById('metric-portfolio-value').textContent = `$${data.portfolio_value.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+    
+    const returnEl = document.getElementById('metric-return');
+    const returnPctEl = document.getElementById('metric-return-pct');
+    const isPostive = data.total_return >= 0;
+    
+    returnEl.textContent = `${isPostive ? '+' : '-'}$${Math.abs(data.total_return).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+    returnEl.className = isPostive ? 'green' : 'red';
+    returnPctEl.textContent = `${isPostive ? '+' : ''}${data.total_return_pct.toFixed(1)}%`;
+    returnPctEl.className = `sub-label ${isPostive ? 'green' : 'red'}`;
+    
+    document.getElementById('metric-trades').textContent = `${data.total_trades} Trades`;
+}
+
+async function fetchRecentTransactions() {
+    const response = await fetch(`${API_BASE}/transactions/${currentUser.user_id}`);
+    const trades = await response.json();
+    const list = document.getElementById('trades-list');
+    list.innerHTML = '';
+    
+    if (trades.length === 0) {
+        list.innerHTML = '<p class="centered" style="color: var(--text-secondary); padding: 2rem;">No recent trades.</p>';
+        return;
+    }
+
+    trades.forEach(trade => {
+        const item = document.createElement('div');
+        item.className = 'activity-item';
+        item.innerHTML = `
+            <div class="trade-type-badge ${trade.type.toLowerCase()}">${trade.type}</div>
+            <div class="trade-info">
+                <h4>${trade.symbol}</h4>
+                <p>${trade.timestamp}</p>
+            </div>
+            <div class="trade-value">
+                <span class="amount">$${trade.total.toLocaleString()}</span>
+                <span class="size">${trade.quantity} @ $${trade.price}</span>
+            </div>
+        `;
+        list.appendChild(item);
+    });
+}
+
+async function fetchPortfolioData() {
+    const response = await fetch(`${API_BASE}/portfolio/${currentUser.user_id}`);
+    const holdings = await response.json();
+    const body = document.getElementById('holdings-table-body');
+    body.innerHTML = '';
+
+    if (holdings.length === 0) {
+        body.innerHTML = '<tr><td colspan="5" class="centered" style="padding: 2rem; color: var(--text-secondary);">No active holdings.</td></tr>';
+        return;
+    }
+
+    holdings.forEach(h => {
+        const totalValue = h.quantity * h.current_price;
+        const profit = (h.current_price - h.avg_price) * h.quantity;
+        const profitPct = ((h.current_price - h.avg_price) / h.avg_price) * 100;
+        const isPositive = profit >= 0;
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td class="symbol-cell">${h.symbol}</td>
+            <td>${h.quantity}</td>
+            <td>$${h.avg_price.toFixed(2)}</td>
+            <td class="price-cell">$${h.current_price.toFixed(2)}</td>
+            <td class="gain-cell ${isPositive ? 'green' : 'red'}">
+                ${isPositive ? '+' : ''}$${profit.toFixed(2)} (${isPositive ? '+' : ''}${profitPct.toFixed(1)}%)
+            </td>
+        `;
+        body.appendChild(row);
+    });
+}
+
+async function fetchMarketOverview() {
+    const response = await fetch(`${API_BASE}/stocks`);
+    const stocks = await response.json();
+    const body = document.getElementById('market-overview-body');
+    body.innerHTML = '';
+
+    stocks.forEach(s => {
+        // Simulated change for visual variety
+        const change = (Math.random() * 10 - 5).toFixed(2);
+        const changePct = (Math.random() * 4 - 2).toFixed(1);
+        const isPositive = change >= 0;
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${s.name}</td>
+            <td class="symbol-cell">${s.symbol}</td>
+            <td class="price-cell">$${s.price.toFixed(2)}</td>
+            <td class="${isPositive ? 'green' : 'red'}">${isPositive ? '+' : ''}$${change}</td>
+            <td class="${isPositive ? 'green' : 'red'}">${isPositive ? '+' : ''}${changePct}%</td>
+        `;
+        body.appendChild(row);
+    });
+}
+
+function renderPerformanceChart() {
+    const ctx = document.getElementById('performanceChart').getContext('2d');
+    
+    if (performanceChart) performanceChart.destroy();
+
+    // Simulated historical data since we don't have historical tracking yet
+    const labels = ['Jan 15', 'Jan 22', 'Jan 29', 'Feb 5', 'Feb 12', 'Feb 19', 'Feb 26', 'Mar 4', 'Mar 11', 'Mar 18', 'Mar 25'];
+    const dataPoints = [10000, 10200, 10150, 10400, 10800, 11200, 11000, 11500, 11800, 12200, 12450];
+
+    performanceChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Portfolio Value',
+                data: dataPoints,
+                borderColor: '#3b82f6',
+                borderWidth: 3,
+                pointRadius: 0,
+                pointHoverRadius: 6,
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: '#141a29',
+                    titleColor: '#8b949e',
+                    bodyColor: '#fff',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    borderWidth: 1,
+                    displayColors: false,
+                    callbacks: {
+                        label: function(context) {
+                            return '$' + context.parsed.y.toLocaleString();
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)', drawBorder: false },
+                    ticks: {
+                        color: '#8b949e',
+                        callback: value => '$' + (value / 1000) + 'k'
+                    }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#8b949e' }
+                }
+            }
+        }
+    });
 }
 
 // --- Authentication ---
@@ -163,6 +347,10 @@ async function checkAuth() {
             if (response.ok) {
                 currentUser = await response.json();
                 updateNavbar();
+                // If on dashboard view, load fresh data
+                if (document.getElementById('dashboard-view').classList.contains('active')) {
+                    initDashboard();
+                }
             } else {
                 localStorage.removeItem('user_id');
             }
@@ -172,7 +360,7 @@ async function checkAuth() {
     }
 }
 
-// --- Profile Management ---
+// --- Profile & Password ---
 function loadProfileData() {
     if (!currentUser) return;
     document.getElementById('profile-fullname').value = currentUser.full_name || '';
@@ -197,7 +385,7 @@ async function handleProfileUpdate(e) {
         });
         const data = await response.json();
         if (response.ok) {
-            currentUser = data; // Update local state
+            currentUser = data;
             updateNavbar();
             showToast('Profile updated successfully!');
         } else {
@@ -266,73 +454,6 @@ async function handleAccountDeactivate() {
     }
 }
 
-// --- Data Fetching ---
-async function fetchStocks() {
-    try {
-        const response = await fetch(`${API_BASE}/stocks`);
-        const stocks = await response.json();
-        renderStocks(stocks);
-    } catch (error) {
-        console.error('Error fetching stocks:', error);
-    }
-}
-
-async function fetchPortfolio() {
-    if (!currentUser) return;
-    try {
-        const response = await fetch(`${API_BASE}/portfolio/${currentUser.user_id}`);
-        const portfolio = await response.json();
-        renderPortfolio(portfolio);
-    } catch (error) {
-        console.error('Error fetching portfolio:', error);
-    }
-}
-
-// --- UI Helpers ---
-function renderStocks(stocks) {
-    const list = document.getElementById('stock-list');
-    list.innerHTML = '';
-    stocks.forEach(stock => {
-        const item = document.createElement('div');
-        item.className = 'stock-item';
-        item.innerHTML = `
-            <div class="stock-info">
-                <h3>${stock.symbol}</h3>
-                <p>${stock.name}</p>
-            </div>
-            <div class="stock-price">
-                <p class="price">$${stock.price.toFixed(2)}</p>
-                <p class="change up">+1.2%</p>
-            </div>
-        `;
-        list.appendChild(item);
-    });
-}
-
-function renderPortfolio(portfolio) {
-    const list = document.getElementById('portfolio-list');
-    list.innerHTML = '';
-    if (portfolio.length === 0) {
-        list.innerHTML = '<p class="empty-msg">No holdings yet. Start trading!</p>';
-        return;
-    }
-    portfolio.forEach(item => {
-        const div = document.createElement('div');
-        div.className = 'portfolio-item';
-        div.innerHTML = `
-            <div class="stock-info">
-                <h3>${item.symbol}</h3>
-                <p>${item.quantity} Shares</p>
-            </div>
-            <div class="stock-price">
-                <p class="price">$${(item.quantity * item.avg_price).toFixed(2)}</p>
-                <p class="change up">Avg: $${item.avg_price.toFixed(2)}</p>
-            </div>
-        `;
-        list.appendChild(div);
-    });
-}
-
 function showError(el, msg) {
     el.textContent = msg;
     el.classList.remove('hidden');
@@ -352,6 +473,5 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('profile-form')?.addEventListener('submit', handleProfileUpdate);
     document.getElementById('password-form')?.addEventListener('submit', handlePasswordUpdate);
     
-    // Initialize icons
     if (window.lucide) lucide.createIcons();
 });

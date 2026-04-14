@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StockSim | Learn to Invest Without the Risk</title>
+    <title>AI Stock Prediction | Smart Virtual Trading</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="landing-page">
     <div class="background-blobs">
@@ -21,7 +22,7 @@
     <nav class="navbar">
         <div class="logo">
             <i data-lucide="trending-up" class="logo-icon"></i>
-            Stock<span>Sim</span>
+            AI Stock<span>Prediction</span>
         </div>
 
         <!-- Central Navigation Tabs (Logged In Only) -->
@@ -63,8 +64,8 @@
         <!-- Hero Section -->
         <header class="hero">
             <div class="hero-content">
-                <h1>Learn to Invest <span>Without the Risk</span></h1>
-                <p>StockSim is a virtual stock trading simulator that lets you practice investing with fake money. Build your portfolio, learn market dynamics, and compete with others — all without risking a single dollar.</p>
+                <h1>AI Stock <span>Prediction</span></h1>
+                <p>Learn to predict and trade stocks using advanced virtual simulation. Build your portfolio, analyze market dynamics, and compete with others — all without risking a single dollar.</p>
                 <div class="hero-btns">
                     <button onclick="showView('auth-register')" class="btn btn-primary large">Start Trading Now <i data-lucide="arrow-right"></i></button>
                     <button onclick="showView('dashboard-view')" class="btn btn-secondary large">View Demo Dashboard</button>
@@ -117,9 +118,9 @@
         <footer class="footer">
             <div class="logo">
                 <i data-lucide="trending-up" class="logo-icon"></i>
-                Stock<span>Sim</span>
+                AI Stock<span>Prediction</span>
             </div>
-            <div class="footer-copy">© 2026 StockSim. All rights reserved.</div>
+            <div class="footer-copy">© 2026 AI Stock Prediction. All rights reserved.</div>
         </footer>
     </section>
 
@@ -129,7 +130,7 @@
             <div class="auth-header">
                 <div class="logo centered">
                     <i data-lucide="trending-up" class="logo-icon"></i>
-                    Stock<span>Sim</span>
+                    AI Stock<span>Prediction</span>
                 </div>
                 <h2>Welcome Back</h2>
                 <p>Sign in to continue your investment journey</p>
@@ -167,7 +168,7 @@
             <div class="auth-header">
                 <div class="logo centered">
                     <i data-lucide="trending-up" class="logo-icon"></i>
-                    Stock<span>Sim</span>
+                    AI Stock<span>Prediction</span>
                 </div>
                 <h2>Create Your Account</h2>
                 <p>Start your investment journey with virtual money</p>
@@ -215,39 +216,172 @@
                 <div class="auth-link">Already have an account? <a href="#" onclick="showView('auth-login')">Login</a></div>
             </form>
         </div>
-        <div class="footer-copy centered">© 2026 StockSim. All rights reserved.</div>
+        <div class="footer-copy centered">© 2026 AI Stock Prediction. All rights reserved.</div>
     </section>
 
     <!-- [DASHBOARD VIEW] -->
     <section id="dashboard-view" class="view dashboard-page">
         <div class="dashboard-container">
-            <header class="dashboard-header">
-                <div>
-                    <h2 class="welcome-label">Welcome on Dashboard, <span id="user-full-name">User</span>!</h2>
-                    <h1>Market Overview</h1>
-                    <p>Track your portfolio and simulate trades in real-time.</p>
+            <!-- Welcome Header Card -->
+            <header class="welcome-card">
+                <div class="welcome-text">
+                    <h1 id="dash-welcome">Welcome back, John</h1>
+                    <p id="dash-date">Tuesday, April 14, 2026 at 05:08 PM</p>
                 </div>
-                <div class="dashboard-actions">
-                    <button class="btn btn-outline" onclick="fetchStocks()"><i data-lucide="refresh-cw"></i> Refresh</button>
+                <div class="header-balance-widget">
+                    <div class="balance-icon-box"><i data-lucide="wallet"></i></div>
+                    <div class="balance-details">
+                        <span class="label">Virtual Balance</span>
+                        <span class="value" id="dash-widget-balance">$0.00</span>
+                    </div>
                 </div>
             </header>
 
-            <div class="main-grid">
-                <div class="card market-trends">
-                    <h2>Trending Stocks</h2>
-                    <div id="stock-list" class="stock-list">
-                        <!-- Stocks will be loaded here -->
-                        <div class="loading-shimmer"></div>
+            <!-- Metrics Grid -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-info">
+                        <span class="label">Virtual Balance</span>
+                        <h2 id="metric-balance">$0.00</h2>
+                    </div>
+                    <div class="metric-icon blue"><i data-lucide="wallet"></i></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-info">
+                        <span class="label">Portfolio Value</span>
+                        <h2 id="metric-portfolio-value">$0.00</h2>
+                    </div>
+                    <div class="metric-icon green"><i data-lucide="piggy-bank"></i></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-info">
+                        <span class="label">Total Return</span>
+                        <h2 id="metric-return">$0.00</h2>
+                        <span class="sub-label green" id="metric-return-pct">+0.0%</span>
+                    </div>
+                    <div class="metric-icon green"><i data-lucide="trending-up"></i></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-info">
+                        <span class="label">Total Trades</span>
+                        <h2 id="metric-trades">0 Trades</h2>
+                    </div>
+                    <div class="metric-icon orange"><i data-lucide="bar-chart-2"></i></div>
+                </div>
+            </div>
+
+            <!-- Performance Chart -->
+            <div class="card chart-card">
+                <div class="card-header">
+                    <h2>Portfolio Performance</h2>
+                    <div class="chart-filters">
+                        <button class="filter-btn">1W</button>
+                        <button class="filter-btn">1M</button>
+                        <button class="filter-btn">3M</button>
+                        <button class="filter-btn active">ALL</button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="performanceChart"></canvas>
+                </div>
+            </div>
+
+            <div class="dashboard-bottom-grid">
+                <!-- Your Holdings -->
+                <div class="card table-card">
+                    <div class="card-header">
+                        <h2>Your Holdings</h2>
+                        <a href="#" class="view-all">View All <i data-lucide="arrow-right"></i></a>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Stock</th>
+                                    <th>Shares</th>
+                                    <th>Avg Price</th>
+                                    <th>Current</th>
+                                    <th>P&L</th>
+                                </tr>
+                            </thead>
+                            <tbody id="holdings-table-body">
+                                <!-- Data will be injected here -->
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
-                <div class="card portfolio-overview">
-                    <h2>Your Portfolio</h2>
-                    <div id="portfolio-list" class="portfolio-list">
-                        <p class="empty-msg">No holdings yet. Start trading!</p>
+                <!-- Recent Trades -->
+                <div class="card table-card">
+                    <div class="card-header">
+                        <h2>Recent Trades</h2>
+                        <a href="#" class="view-all">View All <i data-lucide="arrow-right"></i></a>
+                    </div>
+                    <div class="activity-list" id="trades-list">
+                        <!-- Data will be injected here -->
                     </div>
                 </div>
             </div>
+
+            <!-- Market Overview -->
+            <div class="card table-card full-width">
+                <div class="card-header">
+                    <h2>Market Overview</h2>
+                    <a href="#" class="view-all" onclick="showView('markets-view')">View All Markets <i data-lucide="arrow-right"></i></a>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table extended">
+                        <thead>
+                            <tr>
+                                <th>Company</th>
+                                <th>Ticker</th>
+                                <th>Price</th>
+                                <th>Change</th>
+                                <th>Change %</th>
+                            </tr>
+                        </thead>
+                        <tbody id="market-overview-body">
+                            <!-- Data will be injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- [MARKETS VIEW] -->
+    <section id="markets-view" class="view placeholder-view">
+        <div class="content-container centered">
+            <i data-lucide="line-chart" class="large-icon"></i>
+            <h1>Markets</h1>
+            <p>Real-time market tracking and analysis coming soon.</p>
+        </div>
+    </section>
+
+    <!-- [PORTFOLIO VIEW] -->
+    <section id="portfolio-view" class="view placeholder-view">
+        <div class="content-container centered">
+            <i data-lucide="briefcase" class="large-icon"></i>
+            <h1>Your Portfolio</h1>
+            <p>Detailed portfolio breakdown and analytics coming soon.</p>
+        </div>
+    </section>
+
+    <!-- [HISTORY VIEW] -->
+    <section id="history-view" class="view placeholder-view">
+        <div class="content-container centered">
+            <i data-lucide="history" class="large-icon"></i>
+            <h1>Trade History</h1>
+            <p>Your complete transaction history will be displayed here.</p>
+        </div>
+    </section>
+
+    <!-- [LEADERBOARD VIEW] -->
+    <section id="leaderboard-view" class="view placeholder-view">
+        <div class="content-container centered">
+            <i data-lucide="trophy" class="large-icon"></i>
+            <h1>Leaderboard</h1>
+            <p>Compete with other virtual traders for the top spot.</p>
         </div>
     </section>
 
@@ -332,42 +466,6 @@
                     </button>
                 </div>
             </div>
-        </div>
-    </section>
-
-    <!-- [MARKETS VIEW] -->
-    <section id="markets-view" class="view placeholder-view">
-        <div class="content-container centered">
-            <i data-lucide="line-chart" class="large-icon"></i>
-            <h1>Markets</h1>
-            <p>Real-time market tracking and analysis coming soon.</p>
-        </div>
-    </section>
-
-    <!-- [PORTFOLIO VIEW] -->
-    <section id="portfolio-view" class="view placeholder-view">
-        <div class="content-container centered">
-            <i data-lucide="briefcase" class="large-icon"></i>
-            <h1>Your Portfolio</h1>
-            <p>Detailed portfolio breakdown and analytics coming soon.</p>
-        </div>
-    </section>
-
-    <!-- [HISTORY VIEW] -->
-    <section id="history-view" class="view placeholder-view">
-        <div class="content-container centered">
-            <i data-lucide="history" class="large-icon"></i>
-            <h1>Trade History</h1>
-            <p>Your complete transaction history will be displayed here.</p>
-        </div>
-    </section>
-
-    <!-- [LEADERBOARD VIEW] -->
-    <section id="leaderboard-view" class="view placeholder-view">
-        <div class="content-container centered">
-            <i data-lucide="trophy" class="large-icon"></i>
-            <h1>Leaderboard</h1>
-            <p>Compete with other virtual traders for the top spot.</p>
         </div>
     </section>
 

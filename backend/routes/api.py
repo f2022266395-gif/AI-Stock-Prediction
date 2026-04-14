@@ -79,8 +79,47 @@ def get_portfolio(user_id):
     return jsonify([{
         'symbol': h.stock.ticker,
         'quantity': h.quantity,
-        'avg_price': float(h.avg_buy_price)
+        'avg_price': float(h.avg_buy_price),
+        'current_price': float(h.stock.latest_price)
     } for h in holdings])
+
+@api_bp.route('/dashboard-summary/<int:user_id>', methods=['GET'])
+def get_dashboard_summary(user_id):
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+        
+    holdings = Holding.query.filter_by(user_id=user_id).all()
+    total_holdings_value = sum([float(h.quantity) * float(h.stock.latest_price) for h in holdings])
+    portfolio_value = float(user.virtual_balance) + total_holdings_value
+    
+    # Simple total return calculation (Portfolio Value - Initial $10,000)
+    # In a real app, this would use total_invested from Portfolio model
+    initial_balance = 10000.00
+    total_return = portfolio_value - initial_balance
+    total_return_pct = (total_return / initial_balance) * 100 if initial_balance > 0 else 0
+    
+    trade_count = Transaction.query.filter_by(user_id=user_id).count()
+    
+    return jsonify({
+        'virtual_balance': float(user.virtual_balance),
+        'portfolio_value': portfolio_value,
+        'total_return': total_return,
+        'total_return_pct': total_return_pct,
+        'total_trades': trade_count
+    })
+
+@api_bp.route('/transactions/<int:user_id>', methods=['GET'])
+def get_transactions(user_id):
+    transactions = Transaction.query.filter_by(user_id=user_id).order_by(Transaction.timestamp.desc()).limit(10).all()
+    return jsonify([{
+        'symbol': t.stock.ticker,
+        'type': t.trade_type,
+        'quantity': t.quantity,
+        'price': float(t.price_at_trade),
+        'total': float(t.total_amount),
+        'timestamp': t.timestamp.strftime('%Y-%m-%d %H:%M')
+    } for t in transactions])
 
 @api_bp.route('/user/update/<int:user_id>', methods=['PUT'])
 def update_profile(user_id):
