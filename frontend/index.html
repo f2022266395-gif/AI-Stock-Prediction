@@ -350,11 +350,208 @@
     </section>
 
     <!-- [MARKETS VIEW] -->
-    <section id="markets-view" class="view placeholder-view">
-        <div class="content-container centered">
-            <i data-lucide="line-chart" class="large-icon"></i>
-            <h1>Markets</h1>
-            <p>Real-time market tracking and analysis coming soon.</p>
+    <section id="markets-view" class="view dashboard-page">
+        <div class="profile-header">
+            <h1>Stock Markets</h1>
+            <p>Browse and search historical stock data</p>
+        </div>
+
+        <div class="card" style="margin-bottom: 2rem;">
+            <div class="market-controls">
+                <div class="search-box">
+                    <i data-lucide="search"></i>
+                    <input type="text" id="market-search" placeholder="Search by company name or ticker..." oninput="filterMarkets()">
+                </div>
+                <div class="filter-group">
+                    <select id="filter-sector" onchange="filterMarkets()">
+                        <option value="All">All Sectors</option>
+                        <option value="Technology">Technology</option>
+                        <option value="Finance">Finance</option>
+                        <option value="Healthcare">Healthcare</option>
+                        <option value="Energy">Energy</option>
+                    </select>
+                    <select id="sort-by" onchange="filterMarkets()">
+                        <option value="name">Sort by Name</option>
+                        <option value="price">Sort by Price</option>
+                        <option value="change">Sort by Change %</option>
+                        <option value="volume">Sort by Volume</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 id="market-results-count">Loading Markets...</h2>
+            </div>
+            <div style="overflow-x: auto;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Company Name</th>
+                            <th>Ticker</th>
+                            <th>Sector</th>
+                            <th>Price</th>
+                            <th>Change</th>
+                            <th>Change %</th>
+                            <th>Volume</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="markets-table-body">
+                        <!-- Filled by JS -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <button class="btn btn-outline small">Previous</button>
+                <div class="page-numbers">
+                    <span class="page-num active">1</span>
+                    <span class="page-num">2</span>
+                </div>
+                <button class="btn btn-outline small">Next</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- [STOCK DETAIL VIEW] -->
+    <section id="stock-detail-view" class="view dashboard-page">
+        <button onclick="showView('markets-view')" class="btn btn-outline" style="margin-bottom: 2rem;">
+            <i data-lucide="arrow-left"></i> Back to Markets
+        </button>
+
+        <div class="stock-detail-header welcome-card">
+            <div class="welcome-text">
+                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
+                    <h1 id="detail-company-name">---</h1>
+                    <span id="detail-ticker" class="trade-type-badge buy">---</span>
+                    <span id="detail-sector" style="color: var(--text-secondary); font-size: 0.9rem;">---</span>
+                </div>
+                <p id="detail-last-updated">Last Updated: ---</p>
+            </div>
+            <div style="text-align: right;">
+                <h2 id="detail-price" style="font-size: 3rem; font-weight: 800; font-family: 'JetBrains Mono', monospace; margin-bottom: 0.5rem;">---</h2>
+                <div id="detail-change-container" style="font-size: 1.25rem; font-weight: 700;">
+                    <span id="detail-change">---</span> 
+                    <span id="detail-change-pct">(---)</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="detail-signal-banner" class="signal-banner buy" style="margin-bottom: 2.5rem;">
+            <i data-lucide="trending-up"></i>
+            <span id="detail-signal-text">BUY SIGNAL — SMA20 crossed above SMA50</span>
+        </div>
+
+        <div class="stock-grid">
+            <div class="stock-main-content">
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h2>Price History</h2>
+                        <div class="chart-filters">
+                            <button class="filter-btn">1W</button>
+                            <button class="filter-btn active">1M</button>
+                            <button class="filter-btn">3M</button>
+                            <button class="filter-btn">6M</button>
+                            <button class="filter-btn">1Y</button>
+                        </div>
+                    </div>
+                    <div class="chart-container" style="height: 450px;">
+                        <canvas id="detail-history-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-bottom: 2rem;">
+                    <div class="card-header">
+                        <h2>Technical Indicators</h2>
+                    </div>
+                    <div class="indicator-grid">
+                        <div class="indicator-item">
+                            <span class="label">SMA 20</span>
+                            <h3 id="ind-sma20">---</h3>
+                            <span class="status buy">Buy</span>
+                        </div>
+                        <div class="indicator-item">
+                            <span class="label">SMA 50</span>
+                            <h3 id="ind-sma50">---</h3>
+                            <span class="status buy">Buy</span>
+                        </div>
+                        <div class="indicator-item">
+                            <span class="label">RSI</span>
+                            <h3 id="ind-rsi">---</h3>
+                            <span class="status normal">Normal</span>
+                        </div>
+                        <div class="indicator-item">
+                            <span class="label">Volatility</span>
+                            <h3 id="ind-volatility">---</h3>
+                            <span class="status medium">Medium</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Stock Statistics</h2>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <span class="label">52 Week High</span>
+                            <span id="stat-52h" class="value">---</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="label">52 Week Low</span>
+                            <span id="stat-52l" class="value">---</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="label">Average Volume</span>
+                            <span id="stat-avg-vol" class="value">---</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="label">Market Sector</span>
+                            <span id="stat-sector" class="value">---</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stock-sidebar">
+                <div class="card trade-card sticky-card">
+                    <div class="card-header">
+                        <h2>Place a Trade</h2>
+                    </div>
+                    
+                    <div class="trade-toggle">
+                        <button id="toggle-buy" class="active" onclick="setTradeType('BUY')">BUY</button>
+                        <button id="toggle-sell" onclick="setTradeType('SELL')">SELL</button>
+                    </div>
+
+                    <div class="trade-form">
+                        <div class="trade-stock-info">
+                            <span id="trade-stock-name">Stock Name</span>
+                            <span id="trade-stock-price" class="price">$0.00</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Quantity</label>
+                            <input type="number" id="trade-quantity" placeholder="Number of shares" min="1" step="1" oninput="updateEstimate()">
+                        </div>
+
+                        <div class="estimate-box">
+                            <div class="row">
+                                <span>Estimated Cost</span>
+                                <span id="trade-estimate" class="value">$0.00</span>
+                            </div>
+                            <div class="row balance">
+                                <span><i data-lucide="wallet"></i> Available Balance</span>
+                                <span id="trade-available-balance">$0.00</span>
+                            </div>
+                        </div>
+
+                        <button id="confirm-trade-btn" class="btn btn-primary full large" onclick="confirmTrade()">Confirm BUY</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </section>
 

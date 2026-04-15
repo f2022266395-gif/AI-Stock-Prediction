@@ -67,11 +67,58 @@ def get_me(user_id):
 @api_bp.route('/stocks', methods=['GET'])
 def get_stocks():
     stocks = Stock.query.all()
-    return jsonify([{
-        'symbol': s.ticker,
-        'name': s.company_name,
-        'price': float(s.latest_price)
-    } for s in stocks])
+    result = []
+    for s in stocks:
+        # Simulated data for visual completeness
+        change = (float(s.latest_price) * 0.015) # Simulated 1.5% change
+        change_pct = 1.5
+        volume = "52.4M"
+        result.append({
+            'symbol': s.ticker,
+            'name': s.company_name,
+            'sector': s.sector or 'Technology',
+            'price': float(s.latest_price),
+            'change': change,
+            'change_pct': change_pct,
+            'volume': volume
+        })
+    return jsonify(result)
+
+@api_bp.route('/stocks/<string:ticker>', methods=['GET'])
+def get_stock_detail(ticker):
+    stock = Stock.query.filter_by(ticker=ticker).first()
+    if not stock:
+        return jsonify({'error': 'Stock not found'}), 404
+        
+    # Simulated historical data points for the chart
+    base_price = float(stock.latest_price)
+    history = []
+    import random
+    for i in range(30, -1, -1):
+        price = base_price * (1 + (random.random() * 0.1 - 0.05))
+        history.append({
+            'date': f'Mar {31-i if 31-i > 0 else 30}',
+            'price': round(price, 2)
+        })
+        
+    return jsonify({
+        'symbol': stock.ticker,
+        'name': stock.company_name,
+        'sector': stock.sector or 'Technology',
+        'price': base_price,
+        'change': round(base_price * 0.013, 2),
+        'change_pct': 1.3,
+        'volume': '48.2M',
+        '52w_high': round(base_price * 1.2, 2),
+        '52w_low': round(base_price * 0.8, 2),
+        'history': history,
+        'indicators': {
+            'sma20': round(base_price * 0.98, 2),
+            'sma50': round(base_price * 0.95, 2),
+            'rsi': 64.2,
+            'volatility': 'Medium'
+        }
+    })
 
 @api_bp.route('/portfolio/<int:user_id>', methods=['GET'])
 def get_portfolio(user_id):
@@ -120,6 +167,71 @@ def get_transactions(user_id):
         'total': float(t.total_amount),
         'timestamp': t.timestamp.strftime('%Y-%m-%d %H:%M')
     } for t in transactions])
+
+@api_bp.route('/trade', methods=['POST'])
+def execute_trade():
+    data = request.get_json()
+    user_id = data.get('user_id')
+    ticker = data.get('ticker')
+    trade_type = data.get('trade_type') # 'BUY' or 'SELL'
+    quantity = int(data.get('quantity', 0))
+    
+    if not all([user_id, ticker, trade_type, quantity > 0]):
+        return jsonify({'error': 'Missing or invalid trade data'}), 400
+        
+    user = db.session.get(User, user_id)
+    stock = Stock.query.filter_by(ticker=ticker).first()
+    
+    if not user or not stock:
+        return jsonify({'error': 'User or Stock not found'}), 404
+        
+    price = float(stock.latest_price)
+    total_cost = price * quantity
+    
+    if trade_type == 'BUY':
+        if float(user.virtual_balance) < total_cost:
+            return jsonify({'error': 'Insufficient balance'}), 400
+            
+        user.virtual_balance = float(user.virtual_balance) - total_cost
+        
+        holding = Holding.query.filter_by(user_id=user_id, stock_id=stock.stock_id).first()
+        if holding:
+            # Update average price: (old_qty * old_avg + new_qty * price) / total_qty
+            total_qty = holding.quantity + quantity
+            new_avg = (float(holding.quantity) * float(holding.avg_buy_price) + total_cost) / total_qty
+            holding.quantity = total_qty
+            holding.avg_buy_price = new_avg
+        else:
+            holding = Holding(user_id=user_id, stock_id=stock.stock_id, quantity=quantity, avg_buy_price=price)
+            db.session.add(holding)
+            
+    elif trade_type == 'SELL':
+        holding = Holding.query.filter_by(user_id=user_id, stock_id=stock.stock_id).first()
+        if not holding or holding.quantity < quantity:
+            return jsonify({'error': 'Insufficient shares to sell'}), 400
+            
+        user.virtual_balance = float(user.virtual_balance) + total_cost
+        holding.quantity -= quantity
+        
+        if holding.quantity == 0:
+            db.session.delete(holding)
+            
+    # Record transaction
+    transaction = Transaction(
+        user_id=user_id,
+        stock_id=stock.stock_id,
+        trade_type=trade_type,
+        quantity=quantity,
+        price_at_trade=price,
+        total_amount=total_cost
+    )
+    db.session.add(transaction)
+    db.session.commit()
+    
+    return jsonify({
+        'message': f'Successfully {trade_type.lower()}ed {quantity} shares of {ticker}',
+        'new_balance': float(user.virtual_balance)
+    })
 
 @api_bp.route('/user/update/<int:user_id>', methods=['PUT'])
 def update_profile(user_id):

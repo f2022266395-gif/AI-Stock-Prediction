@@ -1,6 +1,10 @@
 const API_BASE = 'http://localhost:5000/api';
 let currentUser = null;
 let performanceChart = null;
+let detailChart = null;
+let currentStock = null;
+let tradeType = 'BUY';
+let allStocks = [];
 
 // --- UI Components ---
 function showToast(message, type = 'success') {
@@ -35,6 +39,8 @@ async function showView(viewId) {
             await initDashboard();
         } else if (viewId === 'profile-view') {
             loadProfileData();
+        } else if (viewId === 'markets-view') {
+            await initMarkets();
         }
     }
     updateNavbar();
@@ -266,6 +272,221 @@ function renderPerformanceChart() {
             }
         }
     });
+}
+
+// --- Markets & Trading Logic ---
+async function initMarkets() {
+    try {
+        const response = await fetch(`${API_BASE}/stocks`);
+        allStocks = await response.json();
+        renderMarketsTable(allStocks);
+    } catch (error) {
+        console.error("Error loading markets:", error);
+    }
+}
+
+function renderMarketsTable(stocks) {
+    const body = document.getElementById('markets-table-body');
+    const countEl = document.getElementById('market-results-count');
+    body.innerHTML = '';
+    countEl.textContent = `${stocks.length} Stocks Found`;
+
+    stocks.forEach((s, index) => {
+        const isPositive = s.change >= 0;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${index + 1}</td>
+            <td class="symbol-cell">${s.name}</td>
+            <td><span class="trade-type-badge buy">${s.symbol}</span></td>
+            <td>${s.sector}</td>
+            <td class="price-cell">$${s.price.toFixed(2)}</td>
+            <td class="${isPositive ? 'green' : 'red'}">${isPositive ? '+' : ''}$${s.change.toFixed(2)}</td>
+            <td class="${isPositive ? 'green' : 'red'}">${isPositive ? '+' : ''}${s.change_pct}%</td>
+            <td>${s.volume}</td>
+            <td>
+                <button class="btn btn-outline small" onclick="viewStockDetail('${s.symbol}')">View</button>
+            </td>
+        `;
+        body.appendChild(row);
+    });
+}
+
+function filterMarkets() {
+    const query = document.getElementById('market-search').value.toLowerCase();
+    const sector = document.getElementById('filter-sector').value;
+    const sortBy = document.getElementById('sort-by').value;
+
+    let filtered = allStocks.filter(s => {
+        const matchesQuery = s.name.toLowerCase().includes(query) || s.symbol.toLowerCase().includes(query);
+        const matchesSector = sector === 'All' || s.sector === sector;
+        return matchesQuery && matchesSector;
+    });
+
+    // Sorting
+    filtered.sort((a, b) => {
+        if (sortBy === 'name') return a.name.localeCompare(b.name);
+        if (sortBy === 'price') return b.price - a.price;
+        if (sortBy === 'change') return b.change_pct - a.change_pct;
+        if (sortBy === 'volume') return parseFloat(b.volume) - parseFloat(a.volume);
+        return 0;
+    });
+
+    renderMarketsTable(filtered);
+}
+
+async function viewStockDetail(ticker) {
+    try {
+        const response = await fetch(`${API_BASE}/stocks/${ticker}`);
+        const data = await response.json();
+        currentStock = data;
+        
+        // Populate UI
+        document.getElementById('detail-company-name').textContent = data.name;
+        document.getElementById('detail-ticker').textContent = data.symbol;
+        document.getElementById('detail-sector').textContent = data.sector;
+        document.getElementById('detail-price').textContent = `$${data.price.toFixed(2)}`;
+        document.getElementById('detail-last-updated').textContent = `Last Updated: ${new Date().toLocaleTimeString()}`;
+        
+        const changeTxt = document.getElementById('detail-change');
+        const changePctTxt = document.getElementById('detail-change-pct');
+        const isPositive = data.change >= 0;
+        
+        changeTxt.textContent = `${isPositive ? '+' : ''}$${data.change.toFixed(2)}`;
+        changePctTxt.textContent = `(${isPositive ? '+' : ''}${data.change_pct}%)`;
+        changeTxt.className = isPositive ? 'green' : 'red';
+        changePctTxt.className = isPositive ? 'green' : 'red';
+
+        // Signal
+        const banner = document.getElementById('detail-signal-banner');
+        if (data.change_pct > 0.5) {
+            banner.className = 'signal-banner buy';
+            document.getElementById('detail-signal-text').textContent = "BUY SIGNAL — Consistent uptrend detected.";
+        } else {
+            banner.className = 'signal-banner sell';
+            document.getElementById('detail-signal-text').textContent = "NEUTRAL SIGNAL — Market consolidation period.";
+        }
+
+        // Stats & Indicators
+        document.getElementById('ind-sma20').textContent = `$${data.indicators.sma20}`;
+        document.getElementById('ind-sma50').textContent = `$${data.indicators.sma50}`;
+        document.getElementById('ind-rsi').textContent = data.indicators.rsi;
+        document.getElementById('ind-volatility').textContent = data.indicators.volatility;
+        
+        document.getElementById('stat-52h').textContent = `$${data['52w_high']}`;
+        document.getElementById('stat-52l').textContent = `$${data['52w_low']}`;
+        document.getElementById('stat-avg-vol').textContent = data.volume;
+        document.getElementById('stat-sector').textContent = data.sector;
+
+        // Trade Side
+        document.getElementById('trade-stock-name').textContent = data.name;
+        document.getElementById('trade-stock-price').textContent = `$${data.price.toFixed(2)}`;
+        document.getElementById('trade-available-balance').textContent = `$${currentUser.balance.toLocaleString()}`;
+        
+        setTradeType('BUY'); // Reset to buy
+        document.getElementById('trade-quantity').value = '';
+        updateEstimate();
+
+        showView('stock-detail-view');
+        renderDetailChart(data.history);
+        lucide.createIcons();
+    } catch (error) {
+        console.error("Error loading stock detail:", error);
+    }
+}
+
+function renderDetailChart(history) {
+    const ctx = document.getElementById('detail-history-chart').getContext('2d');
+    if (detailChart) detailChart.destroy();
+
+    detailChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: history.map(h => h.date),
+            datasets: [{
+                label: 'Price',
+                data: history.map(h => h.price),
+                borderColor: '#3b82f6',
+                borderWidth: 3,
+                pointRadius: 2,
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#8b949e' } },
+                x: { grid: { display: false }, ticks: { color: '#8b949e' } }
+            }
+        }
+    });
+}
+
+function setTradeType(type) {
+    tradeType = type;
+    const buyBtn = document.getElementById('toggle-buy');
+    const sellBtn = document.getElementById('toggle-sell');
+    const confirmBtn = document.getElementById('confirm-trade-btn');
+
+    if (type === 'BUY') {
+        buyBtn.classList.add('active');
+        sellBtn.classList.remove('active');
+        confirmBtn.className = 'btn btn-primary full large';
+        confirmBtn.textContent = 'Confirm BUY';
+    } else {
+        sellBtn.classList.add('active');
+        buyBtn.classList.remove('active');
+        confirmBtn.className = 'btn btn-danger full large';
+        confirmBtn.textContent = 'Confirm SELL';
+    }
+    updateEstimate();
+}
+
+function updateEstimate() {
+    const qty = parseInt(document.getElementById('trade-quantity').value) || 0;
+    const estimateEl = document.getElementById('trade-estimate');
+    if (currentStock) {
+        const total = qty * currentStock.price;
+        estimateEl.textContent = `$${total.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+    }
+}
+
+async function confirmTrade() {
+    const qty = parseInt(document.getElementById('trade-quantity').value);
+    if (!qty || qty <= 0) {
+        showToast('Please enter a valid quantity', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/trade`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: currentUser.user_id,
+                ticker: currentStock.symbol,
+                trade_type: tradeType,
+                quantity: qty
+            })
+        });
+        
+        const data = await response.json();
+        if (response.ok) {
+            showToast(data.message);
+            currentUser.balance = data.new_balance;
+            document.getElementById('trade-available-balance').textContent = `$${currentUser.balance.toLocaleString()}`;
+            document.getElementById('trade-quantity').value = '';
+            updateEstimate();
+            initDashboard(); // Refresh dashboard in background
+        } else {
+            showToast(data.error || 'Trade failed', 'error');
+        }
+    } catch (error) {
+        showToast('Connection error', 'error');
+    }
 }
 
 // --- Authentication ---
