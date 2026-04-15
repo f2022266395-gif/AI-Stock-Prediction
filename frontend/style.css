@@ -398,7 +398,66 @@ body {
 
 @media (max-width: 1100px) {
     .stock-grid { grid-template-columns: 1fr; }
-    .indicator-grid { grid-template-columns: repeat(2, 1fr); }
+    .indicator-grid { grid-template-columns: repeat(2, 1fr); }/* Portfolio & History Chart Grid */
+.charts-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2rem;
+    margin-bottom: 2.5rem;
+}
+.chart-card-half { min-height: 450px; }
+
+/* History Filters Bar */
+.history-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    align-items: flex-end;
+}
+.filter-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 150px;
+}
+.filter-item label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+.filter-item input, .filter-item select {
+    background: #0b0f1a;
+    border: 1px solid var(--border-color);
+    color: white;
+    padding: 0.8rem 1rem;
+    border-radius: 10px;
+    outline: none;
+    font-family: inherit;
+}
+
+/* Table Total Row (Footer) */
+.total-row td {
+    border-top: 2px solid var(--border-color);
+    font-weight: 800;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* Enhancing metrics icons */
+.metric-icon.orange { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+.metric-icon.blue { background: rgba(59, 130, 246, 0.1); color: var(--accent-color); }
+.metric-icon.green { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+
+/* Trade Badges enhancements */
+.trade-type-badge.sell { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); }
+.trade-type-badge.buy { background: rgba(59, 130, 246, 0.15); color: var(--accent-color); border: 1px solid rgba(59, 130, 246, 0.2); }
+
+@media (max-width: 1200px) {
+    .charts-row { grid-template-columns: 1fr; }
+}
 }
 
 /* Dashboard Design */
@@ -579,4 +638,89 @@ body {
     .welcome-card { flex-direction: column; text-align: center; gap: 1.5rem; }
     .navbar { padding: 1rem 5%; }
     .nav-tabs { display: none; }
+}
+
+/* Leaderboard Podium */
+.podium-section {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 1.5rem;
+    margin: 3rem 0;
+}
+.podium-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 2rem;
+    text-align: center;
+    width: 260px;
+    transition: all 0.3s ease;
+    position: relative;
+}
+.podium-card.rank-1 {
+    height: 380px;
+    border: 2px solid rgba(245, 158, 11, 0.3);
+    box-shadow: 0 0 30px rgba(245, 158, 11, 0.1);
+    z-index: 2;
+}
+.podium-card.rank-2, .podium-card.rank-3 {
+    height: 320px;
+}
+.medal-icon {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+}
+.rank-1 .medal-icon { color: #f59e0b; }
+.rank-2 .medal-icon { color: #94a3b8; }
+.rank-3 .medal-icon { color: #b45309; }
+
+.podium-avatar {
+    width: 80px;
+    height: 80px;
+    background: #21262d;
+    border-radius: 50%;
+    margin: 0 auto 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--accent-color);
+    border: 3px solid var(--border-color);
+}
+.rank-1 .podium-avatar { width: 100px; height: 100px; font-size: 2rem; border-color: #f59e0b; }
+
+.podium-card h3 { margin-bottom: 0.5rem; font-size: 1.25rem; }
+.podium-card .return { display: block; font-weight: 800; font-size: 1.5rem; margin-bottom: 0.25rem; }
+.podium-card .value { color: var(--text-secondary); font-size: 0.9rem; font-family: 'JetBrains Mono', monospace; }
+
+/* User Rank Banner */
+.user-rank-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2rem 3rem;
+    margin-bottom: 3rem;
+    background: rgba(59, 130, 246, 0.05);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 20px;
+}
+.user-rank-banner .rank-info { display: flex; align-items: center; gap: 2rem; }
+.user-rank-banner #user-rank-number { font-size: 3.5rem; font-weight: 900; color: var(--accent-color); font-family: 'Outfit', sans-serif; line-height: 1; }
+.user-rank-banner .details h3 { font-size: 1.1rem; margin-bottom: 0.25rem; }
+.user-rank-banner .details p { color: var(--text-secondary); font-size: 0.9rem; }
+
+.user-rank-banner .user-stats { display: flex; align-items: center; gap: 3rem; }
+.user-rank-banner .stat { text-align: right; }
+.user-rank-banner .stat span { font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; }
+.user-rank-banner .stat h3 { font-size: 1.75rem; font-weight: 800; }
+
+.btn.glow { box-shadow: 0 0 15px rgba(59, 130, 246, 0.4); }
+
+@media (max-width: 900px) {
+    .podium-section { flex-direction: column; align-items: center; }
+    .podium-card { width: 100%; height: auto !important; }
+    .user-rank-banner { flex-direction: column; gap: 2rem; text-align: center; }
+    .user-rank-banner .user-stats { flex-direction: column; gap: 1rem; }
 }

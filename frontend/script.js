@@ -2,9 +2,12 @@ const API_BASE = 'http://localhost:5000/api';
 let currentUser = null;
 let performanceChart = null;
 let detailChart = null;
+let allocationChart = null;
+let portPerfChart = null;
 let currentStock = null;
 let tradeType = 'BUY';
 let allStocks = [];
+let allTransactions = [];
 
 // --- UI Components ---
 function showToast(message, type = 'success') {
@@ -41,6 +44,12 @@ async function showView(viewId) {
             loadProfileData();
         } else if (viewId === 'markets-view') {
             await initMarkets();
+        } else if (viewId === 'portfolio-view') {
+            await initPortfolio();
+        } else if (viewId === 'history-view') {
+            await initHistory();
+        } else if (viewId === 'leaderboard-view') {
+            await initLeaderboard();
         }
     }
     updateNavbar();
@@ -489,7 +498,250 @@ async function confirmTrade() {
     }
 }
 
-// --- Authentication ---
+// --- Portfolio Logic ---
+async function initPortfolio() {
+    if (!currentUser) return;
+    
+    try {
+        const [summRes, portRes] = await Promise.all([
+            fetch(`${API_BASE}/dashboard-summary/${currentUser.user_id}`),
+            fetch(`${API_BASE}/portfolio/${currentUser.user_id}`)
+        ]);
+        
+        const summary = await summRes.json();
+        const holdings = await portRes.json();
+        
+        // Populate Metrics
+        document.getElementById('port-total-value').textContent = `$${summary.portfolio_value.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+        document.getElementById('port-cash').textContent = `$${summary.virtual_balance.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+        
+        const retEl = document.getElementById('port-return');
+        const retPctEl = document.getElementById('port-return-pct');
+        const isPos = summary.total_return >= 0;
+        retEl.textContent = `${isPos ? '+' : '-'}$${Math.abs(summary.total_return).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+        retEl.className = isPos ? 'green' : 'red';
+        retPctEl.textContent = `${isPos ? '+' : ''}${summary.total_return_pct.toFixed(2)}%`;
+        retPctEl.className = `sub-label ${isPos ? 'green' : 'red'}`;
+
+        renderAllocationChart(holdings);
+        renderPortfolioPerformance(); // Line chart
+        renderPortfolioTable(holdings);
+    } catch (e) {
+        console.error("Portfolio load error:", e);
+    }
+}
+
+function renderAllocationChart(holdings) {
+    const ctx = document.getElementById('allocationChart').getContext('2d');
+    if (allocationChart) allocationChart.destroy();
+    
+    if (holdings.length === 0) {
+        // Draw empty state handled by Chart.js or just show text
+    }
+
+    const data = {
+        labels: holdings.map(h => h.symbol),
+        datasets: [{
+            data: holdings.map(h => h.quantity * h.current_price),
+            backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'],
+            borderWidth: 0,
+            hoverOffset: 10
+        }]
+    };
+
+    allocationChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: data,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '70%',
+            plugins: {
+                legend: { position: 'bottom', labels: { color: '#8b949e', usePointStyle: true, padding: 20 } }
+            }
+        }
+    });
+}
+
+function renderPortfolioPerformance() {
+    const ctx = document.getElementById('portPerformanceChart').getContext('2d');
+    if (portPerfChart) portPerfChart.destroy();
+
+    const labels = ['Jan 15', 'Jan 22', 'Jan 29', 'Feb 5', 'Feb 12', 'Feb 19', 'Feb 26', 'Mar 4', 'Mar 11', 'Mar 18', 'Mar 25'];
+    const dataPoints = [10000, 10200, 10150, 10400, 10800, 11200, 11000, 11500, 11800, 12200, 12450];
+
+    portPerfChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Total Value',
+                data: dataPoints,
+                borderColor: '#10b981',
+                borderWidth: 3,
+                pointRadius: 3,
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#8b949e' } },
+                x: { grid: { display: false }, ticks: { color: '#8b949e' } }
+            }
+        }
+    });
+}
+
+function renderPortfolioTable(holdings) {
+    const body = document.getElementById('port-holdings-body');
+    body.innerHTML = '';
+    
+    let totalVal = 0;
+    let totalPnL = 0;
+
+    holdings.forEach(h => {
+        const val = h.quantity * h.current_price;
+        const pnl = (h.current_price - h.avg_price) * h.quantity;
+        const pnlPct = ((h.current_price - h.avg_price) / h.avg_price) * 100;
+        const isPos = pnl >= 0;
+        
+        totalVal += val;
+        totalPnL += pnl;
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>Stock Name</td>
+            <td class="symbol-cell">${h.symbol}</td>
+            <td>${h.quantity}</td>
+            <td>$${h.avg_price.toFixed(2)}</td>
+            <td class="price-cell">$${h.current_price.toFixed(2)}</td>
+            <td>$${val.toLocaleString()}</td>
+            <td class="${isPos ? 'green' : 'red'}">${isPos ? '+' : ''}$${pnl.toFixed(2)}</td>
+            <td class="${isPos ? 'green' : 'red'}">${isPos ? '+' : ''}${pnlPct.toFixed(1)}%</td>
+            <td><button class="btn btn-outline small danger-btn" onclick="viewStockDetail('${h.symbol}')">Sell</button></td>
+        `;
+        body.appendChild(row);
+    });
+
+    document.getElementById('port-total-holdings-value').textContent = `$${totalVal.toLocaleString()}`;
+    const totalPos = totalPnL >= 0;
+    const totalGainEl = document.getElementById('port-total-gain');
+    const totalGainPctEl = document.getElementById('port-total-gain-pct');
+    
+    totalGainEl.textContent = `${totalPos ? '+' : ''}$${totalPnL.toLocaleString()}`;
+    totalGainEl.className = totalPos ? 'green' : 'red';
+    
+    const overallPct = totalVal > 0 ? (totalPnL / (totalVal - totalPnL)) * 100 : 0;
+    totalGainPctEl.textContent = `${totalPos ? '+' : ''}${overallPct.toFixed(2)}%`;
+    totalGainPctEl.className = totalPos ? 'green' : 'red';
+}
+
+// --- History Logic ---
+async function initHistory() {
+    if (!currentUser) return;
+    try {
+        const response = await fetch(`${API_BASE}/transactions/${currentUser.user_id}`);
+        allTransactions = await response.json();
+        
+        // Populate Stock Filter
+        const stockFilter = document.getElementById('history-stock-filter');
+        const uniqueStocks = [...new Set(allTransactions.map(t => t.symbol))];
+        stockFilter.innerHTML = '<option value="All">All Stocks</option>';
+        uniqueStocks.forEach(s => {
+            stockFilter.innerHTML += `<option value="${s}">${s}</option>`;
+        });
+
+        applyHistoryFilters();
+    } catch (e) {
+        console.error("History load error:", e);
+    }
+}
+
+function applyHistoryFilters() {
+    const dateFrom = document.getElementById('history-date-from').value;
+    const dateTo = document.getElementById('history-date-to').value;
+    const type = document.getElementById('history-type').value;
+    const stock = document.getElementById('history-stock-filter').value;
+
+    let filtered = allTransactions.filter(t => {
+        const tDate = t.timestamp.split(' ')[0];
+        const matchesDate = (!dateFrom || tDate >= dateFrom) && (!dateTo || tDate <= dateTo);
+        const matchesType = type === 'All' || t.type === type;
+        const matchesStock = stock === 'All' || t.symbol === stock;
+        return matchesDate && matchesType && matchesStock;
+    });
+
+    renderHistory(filtered);
+}
+
+function renderHistory(data) {
+    const body = document.getElementById('history-table-body');
+    body.innerHTML = '';
+    
+    let totalBought = 0;
+    let totalSold = 0;
+
+    data.forEach((t, i) => {
+        if (t.type === 'BUY') totalBought += t.total;
+        else totalSold += t.total;
+
+        const row = document.createElement('tr');
+        const isGain = t.gain_loss > 0;
+        row.innerHTML = `
+            <td>${i + 1}</td>
+            <td>${t.timestamp}</td>
+            <td>${t.company || 'Company Name'}</td>
+            <td><span class="trade-type-badge buy">${t.symbol}</span></td>
+            <td><span class="trade-type-badge ${t.type.toLowerCase()}">${t.type}</span></td>
+            <td>${t.quantity}</td>
+            <td>$${t.price.toFixed(2)}</td>
+            <td>$${t.total.toLocaleString()}</td>
+            <td class="${t.type === 'SELL' ? (isGain ? 'green' : 'red') : 'grey'}">
+                ${t.type === 'SELL' ? (isGain ? '+' : '') + '$' + t.gain_loss.toFixed(2) : '--'}
+            </td>
+        `;
+        body.appendChild(row);
+    });
+
+    document.getElementById('hist-total-trades').textContent = data.length;
+    document.getElementById('hist-total-bought').textContent = `$${totalBought.toLocaleString()}`;
+    document.getElementById('hist-total-sold').textContent = `$${totalSold.toLocaleString()}`;
+    document.getElementById('hist-count').textContent = `${data.length} Transactions`;
+}
+
+function resetHistoryFilters() {
+    document.getElementById('history-date-from').value = '';
+    document.getElementById('history-date-to').value = '';
+    document.getElementById('history-type').value = 'All';
+    document.getElementById('history-stock-filter').value = 'All';
+    applyHistoryFilters();
+}
+
+function exportToCSV() {
+    if (allTransactions.length === 0) return;
+    
+    const headers = ['Date', 'Stock', 'Ticker', 'Type', 'Quantity', 'Price', 'Total', 'Gain/Loss'];
+    const rows = allTransactions.map(t => [
+        t.timestamp, t.company, t.symbol, t.type, t.quantity, t.price, t.total, t.gain_loss
+    ]);
+
+    let csvContent = "data:text/csv;charset=utf-8," 
+        + headers.join(",") + "\n"
+        + rows.map(e => e.join(",")).join("\n");
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `trade_history_${currentUser.username}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
 async function handleRegister(e) {
     e.preventDefault();
     const errorEl = document.getElementById('register-error');

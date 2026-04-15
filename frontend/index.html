@@ -556,29 +556,272 @@
     </section>
 
     <!-- [PORTFOLIO VIEW] -->
-    <section id="portfolio-view" class="view placeholder-view">
-        <div class="content-container centered">
-            <i data-lucide="briefcase" class="large-icon"></i>
-            <h1>Your Portfolio</h1>
-            <p>Detailed portfolio breakdown and analytics coming soon.</p>
+    <section id="portfolio-view" class="view dashboard-page">
+        <div class="profile-header">
+            <h1>My Portfolio</h1>
+            <p>Track your virtual investments and diversification</p>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-info">
+                    <span class="label">Total Portfolio Value</span>
+                    <h2 id="port-total-value">$0.00</h2>
+                </div>
+                <div class="metric-icon blue"><i data-lucide="line-chart"></i></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-info">
+                    <span class="label">Available Cash</span>
+                    <h2 id="port-cash">$0.00</h2>
+                </div>
+                <div class="metric-icon green"><i data-lucide="wallet"></i></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-info">
+                    <span class="label">Total Return</span>
+                    <h2 id="port-return">$0.00</h2>
+                    <span class="sub-label green" id="port-return-pct">+0.0%</span>
+                </div>
+                <div class="metric-icon green"><i data-lucide="trending-up"></i></div>
+            </div>
+        </div>
+
+        <div class="charts-row">
+            <div class="card chart-card-half">
+                <div class="card-header">
+                    <h2>Allocation Breakdown</h2>
+                </div>
+                <div class="chart-container" style="height: 350px;">
+                    <canvas id="allocationChart"></canvas>
+                </div>
+            </div>
+            <div class="card chart-card-half">
+                <div class="card-header">
+                    <h2>Portfolio Value Over Time</h2>
+                </div>
+                <div class="chart-container" style="height: 350px;">
+                    <canvas id="portPerformanceChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="card table-card full-width">
+            <div class="card-header">
+                <h2>Current Holdings</h2>
+            </div>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Company</th>
+                            <th>Ticker</th>
+                            <th>Shares</th>
+                            <th>Avg Price</th>
+                            <th>Current</th>
+                            <th>Value</th>
+                            <th>Gain/Loss</th>
+                            <th>%</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="port-holdings-body">
+                        <!-- Filled by JS -->
+                    </tbody>
+                    <tfoot>
+                        <tr class="total-row">
+                            <td colspan="5">Total</td>
+                            <td id="port-total-holdings-value">$0.00</td>
+                            <td id="port-total-gain" class="green">+$0.00</td>
+                            <td id="port-total-gain-pct" class="green">+0.00%</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
         </div>
     </section>
 
     <!-- [HISTORY VIEW] -->
-    <section id="history-view" class="view placeholder-view">
-        <div class="content-container centered">
-            <i data-lucide="history" class="large-icon"></i>
-            <h1>Trade History</h1>
-            <p>Your complete transaction history will be displayed here.</p>
+    <section id="history-view" class="view dashboard-page">
+        <div class="profile-header">
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <div>
+                    <h1>Transaction History</h1>
+                    <p>Complete record of all your trades</p>
+                </div>
+                <button class="btn btn-primary" onclick="exportToCSV()">
+                    <i data-lucide="download"></i> Export to CSV
+                </button>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 2rem;">
+            <div class="history-filters">
+                <div class="filter-item">
+                    <label>Date From</label>
+                    <input type="date" id="history-date-from">
+                </div>
+                <div class="filter-item">
+                    <label>Date To</label>
+                    <input type="date" id="history-date-to">
+                </div>
+                <div class="filter-item">
+                    <label>Type</label>
+                    <select id="history-type">
+                        <option value="All">All Transactions</option>
+                        <option value="BUY">Buy Only</option>
+                        <option value="SELL">Sell Only</option>
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label>Stock</label>
+                    <select id="history-stock-filter">
+                        <option value="All">All Stocks</option>
+                        <!-- Dynamic -->
+                    </select>
+                </div>
+                <button class="btn btn-outline" onclick="resetHistoryFilters()">Reset</button>
+            </div>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-info">
+                    <span class="label">Total Trades</span>
+                    <h2 id="hist-total-trades">0</h2>
+                </div>
+                <div class="metric-icon blue"><i data-lucide="bar-chart"></i></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-info">
+                    <span class="label">Total Bought</span>
+                    <h2 id="hist-total-bought">$0.00</h2>
+                </div>
+                <div class="metric-icon green"><i data-lucide="trending-up"></i></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-info">
+                    <span class="label">Total Sold</span>
+                    <h2 id="hist-total-sold">$0.00</h2>
+                </div>
+                <div class="metric-icon orange"><i data-lucide="trending-down"></i></div>
+            </div>
+        </div>
+
+        <div class="card table-card">
+            <div class="card-header">
+                <h2 id="hist-count">0 Transactions</h2>
+            </div>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Date & Time</th>
+                            <th>Stock</th>
+                            <th>Ticker</th>
+                            <th>Type</th>
+                            <th>Quantity</th>
+                            <th>Price</th>
+                            <th>Total</th>
+                            <th>Gain/Loss</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body">
+                        <!-- Filled by JS -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <span id="hist-showing-text">Showing 0 to 0 of 0 results</span>
+                <div class="page-numbers" id="hist-pagination">
+                    <!-- Dynamic -->
+                </div>
+            </div>
         </div>
     </section>
 
     <!-- [LEADERBOARD VIEW] -->
-    <section id="leaderboard-view" class="view placeholder-view">
-        <div class="content-container centered">
-            <i data-lucide="trophy" class="large-icon"></i>
+    <section id="leaderboard-view" class="view dashboard-page">
+        <div class="profile-header centered">
             <h1>Leaderboard</h1>
-            <p>Compete with other virtual traders for the top spot.</p>
+            <p>Top performing investors on the platform</p>
+        </div>
+
+        <!-- Podium Section -->
+        <div class="podium-section">
+            <div class="podium-card rank-2">
+                <div class="medal-icon"><i data-lucide="award"></i></div>
+                <div class="podium-avatar" id="podium-2-avatar">---</div>
+                <h3 id="podium-2-name">---</h3>
+                <span id="podium-2-return" class="return green">+0.0%</span>
+                <span id="podium-2-value" class="value">$0</span>
+            </div>
+            <div class="podium-card rank-1">
+                <div class="medal-icon"><i data-lucide="trophy"></i></div>
+                <div class="podium-avatar" id="podium-1-avatar">---</div>
+                <h3 id="podium-1-name">---</h3>
+                <span id="podium-1-return" class="return green">+0.0%</span>
+                <span id="podium-1-value" class="value">$0</span>
+            </div>
+            <div class="podium-card rank-3">
+                <div class="medal-icon"><i data-lucide="medal"></i></div>
+                <div class="podium-avatar" id="podium-3-avatar">---</div>
+                <h3 id="podium-3-name">---</h3>
+                <span id="podium-3-return" class="return green">+0.0%</span>
+                <span id="podium-3-value" class="value">$0</span>
+            </div>
+        </div>
+
+        <!-- User Current Rank -->
+        <div class="card user-rank-banner">
+            <div class="rank-info">
+                <h2 id="user-rank-number">#--</h2>
+                <div class="details">
+                    <h3>Your Current Rank</h3>
+                    <p id="user-rank-context">#-- out of -- users</p>
+                </div>
+            </div>
+            <div class="user-stats">
+                <div class="stat">
+                    <span>Your Return</span>
+                    <h3 id="user-rank-return" class="green">+0.0%</h3>
+                </div>
+                <button class="btn btn-primary small glow">
+                    <i data-lucide="trending-up"></i> Keep it up!
+                </button>
+            </div>
+        </div>
+
+        <!-- Full Rankings Table -->
+        <div class="card table-card full-width">
+            <div class="card-header">
+                <h2>Full Rankings</h2>
+            </div>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Username</th>
+                            <th>Portfolio Value</th>
+                            <th>Total Return</th>
+                            <th>Return %</th>
+                            <th>Trades</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-table-body">
+                        <!-- Filled by JS -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <span id="leaderboard-showing-text">Showing 1 to 10 of -- users</span>
+                <div class="page-numbers" id="leaderboard-pagination">
+                    <!-- Dynamic -->
+                </div>
+            </div>
         </div>
     </section>
 

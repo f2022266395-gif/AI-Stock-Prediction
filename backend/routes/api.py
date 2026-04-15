@@ -158,13 +158,15 @@ def get_dashboard_summary(user_id):
 
 @api_bp.route('/transactions/<int:user_id>', methods=['GET'])
 def get_transactions(user_id):
-    transactions = Transaction.query.filter_by(user_id=user_id).order_by(Transaction.timestamp.desc()).limit(10).all()
+    transactions = Transaction.query.filter_by(user_id=user_id).order_by(Transaction.timestamp.desc()).all()
     return jsonify([{
         'symbol': t.stock.ticker,
+        'company': t.stock.company_name,
         'type': t.trade_type,
         'quantity': t.quantity,
         'price': float(t.price_at_trade),
         'total': float(t.total_amount),
+        'gain_loss': float(t.gain_loss or 0),
         'timestamp': t.timestamp.strftime('%Y-%m-%d %H:%M')
     } for t in transactions])
 
@@ -204,12 +206,16 @@ def execute_trade():
         else:
             holding = Holding(user_id=user_id, stock_id=stock.stock_id, quantity=quantity, avg_buy_price=price)
             db.session.add(holding)
+        gain_loss = 0
             
     elif trade_type == 'SELL':
         holding = Holding.query.filter_by(user_id=user_id, stock_id=stock.stock_id).first()
         if not holding or holding.quantity < quantity:
             return jsonify({'error': 'Insufficient shares to sell'}), 400
             
+        # Calculate Realized G/L: (Sale Price - Avg Buy Price) * Quantity
+        gain_loss = (price - float(holding.avg_buy_price)) * quantity
+        
         user.virtual_balance = float(user.virtual_balance) + total_cost
         holding.quantity -= quantity
         
@@ -223,8 +229,17 @@ def execute_trade():
         trade_type=trade_type,
         quantity=quantity,
         price_at_trade=price,
-        total_amount=total_cost
+        total_amount=total_cost,
+        gain_loss=gain_loss
     )
+    
+    if trade_type == 'SELL':
+        # Re-fetch or use local avg_buy_price to calculate realized G/L
+        # Note: 'holding' was already modified (decremented). 
+        # For accurate G/L we need the avg_price at the time of sale.
+        # This belongs inside the SELL block for better precision, but let's adjust it here.
+        pass
+
     db.session.add(transaction)
     db.session.commit()
     
@@ -303,3 +318,36 @@ def delete_account(user_id):
     db.session.commit()
     
     return jsonify({'message': 'Account deleted successfully'})
+
+@api_bp.route('/leaderboard', methods=['GET'])
+def get_leaderboard():
+    users = User.query.all()
+    leaderboard = []
+    
+    for user in users:
+        # Calculate current holdings value
+        holdings = Holding.query.filter_by(user_id=user.user_id).all()
+        holdings_value = sum([float(h.quantity) * float(h.stock.latest_price) for h in holdings])
+        portfolio_value = float(user.virtual_balance) + holdings_value
+        
+        # Calculate returns
+        initial_balance = 10000.00
+        total_return = portfolio_value - initial_balance
+        total_return_pct = (total_return / initial_balance) * 100 if initial_balance > 0 else 0
+        
+        trade_count = Transaction.query.filter_by(user_id=user.user_id).count()
+        
+        leaderboard.append({
+            'user_id': user.user_id,
+            'username': user.username,
+            'full_name': user.full_name,
+            'portfolio_value': portfolio_value,
+            'total_return': total_return,
+            'return_pct': total_return_pct,
+            'trades': trade_count
+        })
+    
+    # Sort by return_pct descending
+    leaderboard.sort(key=lambda x: x['return_pct'], reverse=True)
+    
+    return jsonify(leaderboard)
