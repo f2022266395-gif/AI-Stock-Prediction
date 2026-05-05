@@ -16,3 +16,4 @@ class Config:
     
     STATIC_FOLDER = os.path.join(BASE_DIR, 'frontend')
     DEBUG = os.getenv('DEBUG', 'True') == 'True'
+    FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY')

@@ -4,3 +4,4 @@ flask-cors
 yfinance
 pandas
 python-dotenv
+finnhub-python

@@ -15,6 +15,17 @@
         <div class="blob blob-2"></div>
     </div>
 
+    <!-- App Loader Overlay -->
+    <div id="app-loader" class="app-loader">
+        <div class="loader-content">
+            <div class="loader-logo">
+                <i data-lucide="trending-up"></i>
+            </div>
+            <div class="loader-text">AI Stock<span>Prediction</span></div>
+            <div class="loader-bar"><div class="progress"></div></div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast-container" class="toast-container"></div>
 
@@ -23,6 +34,10 @@
         <div class="logo">
             <i data-lucide="trending-up" class="logo-icon"></i>
             AI Stock<span>Prediction</span>
+            <div class="live-status">
+                <span class="pulse"></span>
+                <span class="status-text">LIVE</span>
+            </div>
         </div>
 
         <!-- Central Navigation Tabs (Logged In Only) -->
@@ -234,6 +249,9 @@
                         <span class="label">Virtual Balance</span>
                         <span class="value" id="dash-widget-balance">$0.00</span>
                     </div>
+                    <div class="refresh-indicator" id="refresh-indicator">
+                        <i data-lucide="refresh-cw"></i>
+                    </div>
                 </div>
             </header>
 
@@ -405,12 +423,14 @@
                 </table>
             </div>
             <div class="pagination">
-                <button class="btn btn-outline small">Previous</button>
-                <div class="page-numbers">
-                    <span class="page-num active">1</span>
-                    <span class="page-num">2</span>
+                <div class="page-info" id="market-page-info">Showing 0-0 of 0</div>
+                <div class="page-controls">
+                    <button id="market-prev-btn" class="btn btn-outline small">Previous</button>
+                    <div class="page-numbers" id="market-page-numbers">
+                        <span class="page-num active">1</span>
+                    </div>
+                    <button id="market-next-btn" class="btn btn-outline small">Next</button>
                 </div>
-                <button class="btn btn-outline small">Next</button>
             </div>
         </div>
     </section>

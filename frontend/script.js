@@ -5,9 +5,18 @@ let detailChart = null;
 let allocationChart = null;
 let portPerfChart = null;
 let currentStock = null;
+let currentViewedTicker = null;
+let refreshInterval = null;
 let tradeType = 'BUY';
 let allStocks = [];
 let allTransactions = [];
+let marketCurrentPage = 1;
+const marketItemsPerPage = 10;
+let currentFilteredStocks = [];
+let historyCurrentPage = 1;
+const historyItemsPerPage = 10;
+let currentFilteredTransactions = [];
+let currentView = 'home-view';
 
 // --- UI Components ---
 function showToast(message, type = 'success') {
@@ -32,29 +41,69 @@ function showToast(message, type = 'success') {
 
 // --- View Management ---
 async function showView(viewId) {
+    showAppLoader();
+    currentView = viewId;
+    
     document.querySelectorAll('.view').forEach(view => {
         view.classList.remove('active');
     });
+    
     const target = document.getElementById(viewId);
     if (target) {
         target.classList.add('active');
-        if (viewId === 'dashboard-view') {
-            await initDashboard();
-        } else if (viewId === 'profile-view') {
-            loadProfileData();
-        } else if (viewId === 'markets-view') {
-            await initMarkets();
-        } else if (viewId === 'portfolio-view') {
-            await initPortfolio();
-        } else if (viewId === 'history-view') {
-            await initHistory();
-        } else if (viewId === 'leaderboard-view') {
-            await initLeaderboard();
+        try {
+            if (viewId === 'dashboard-view') {
+                await initDashboard();
+            } else if (viewId === 'profile-view') {
+                loadProfileData();
+            } else if (viewId === 'markets-view') {
+                await initMarkets();
+            } else if (viewId === 'portfolio-view') {
+                await initPortfolio();
+            } else if (viewId === 'history-view') {
+                await initHistory();
+            } else if (viewId === 'leaderboard-view') {
+                await initLeaderboard();
+            }
+        } catch (err) {
+            console.error(`Error loading view ${viewId}:`, err);
         }
     }
+    
     updateNavbar();
     setActiveTab(viewId);
     window.scrollTo(0, 0);
+    
+    // Small delay to ensure smooth transition
+    setTimeout(hideAppLoader, 400);
+}
+
+function showAppLoader() {
+    let loader = document.getElementById('app-loader');
+    if (!loader) {
+        // Re-create loader if it was removed
+        const loaderHTML = `
+            <div id="app-loader" class="app-loader">
+                <div class="loader-content">
+                    <div class="loader-logo"><i data-lucide="trending-up"></i></div>
+                    <div class="loader-text">AI Stock<span>Prediction</span></div>
+                    <div class="loader-bar"><div class="progress"></div></div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('afterbegin', loaderHTML);
+        if (window.lucide) lucide.createIcons();
+        loader = document.getElementById('app-loader');
+    }
+    loader.classList.remove('fade-out');
+}
+
+function hideAppLoader() {
+    const loader = document.getElementById('app-loader');
+    if (loader) {
+        loader.classList.add('fade-out');
+        // We don't remove it from DOM anymore, just keep it hidden for reuse
+    }
 }
 
 function updateNavbar() {
@@ -62,17 +111,30 @@ function updateNavbar() {
     const userNav = document.getElementById('user-nav');
     const mainTabs = document.getElementById('main-nav-tabs');
     
+    // Determine if we should show user nav or guest nav
     if (currentUser) {
         guestNav.classList.add('hidden');
         userNav.classList.remove('hidden');
-        mainTabs.classList.remove('hidden');
         
-        document.getElementById('nav-user-initials').textContent = getInitials(currentUser.full_name || currentUser.username);
+        // Show tabs only if NOT on the landing page
+        if (currentView === 'home-view' || currentView === 'auth-login' || currentView === 'auth-register') {
+            mainTabs.classList.add('hidden');
+        } else {
+            mainTabs.classList.remove('hidden');
+        }
+        
+        // Update user info
+        const initials = getInitials(currentUser.full_name || currentUser.username);
+        document.getElementById('nav-user-initials').textContent = initials;
         document.getElementById('nav-user-full-name').textContent = currentUser.full_name || currentUser.username;
         
         const welcomeTitle = document.getElementById('dash-welcome');
-        if (welcomeTitle) welcomeTitle.textContent = `Welcome back, ${currentUser.full_name.split(' ')[0]}`;
+        if (welcomeTitle) {
+            const firstName = (currentUser.full_name || currentUser.username).split(' ')[0];
+            welcomeTitle.textContent = `Welcome back, ${firstName}`;
+        }
     } else {
+        // Not logged in
         guestNav.classList.remove('hidden');
         userNav.classList.add('hidden');
         mainTabs.classList.add('hidden');
@@ -95,23 +157,40 @@ function getInitials(name) {
 
 // --- Dashboard Logic ---
 async function initDashboard() {
-    if (!currentUser) return;
-    
-    // Update date
-    const now = new Date();
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-    document.getElementById('dash-date').textContent = now.toLocaleDateString('en-US', options);
-
     try {
-        await Promise.all([
-            fetchDashboardSummary(),
-            fetchRecentTransactions(),
-            fetchPortfolioData(),
-            fetchMarketOverview()
-        ]);
+        await fetchDashboardSummary();
+        await fetchRecentTransactions();
+        await fetchPortfolioData();
+        await fetchMarketOverview();
+        
+        // Start live polling if not already started
+        if (!refreshInterval) {
+            refreshInterval = setInterval(refreshLiveData, 30000); // 30 seconds
+        }
         renderPerformanceChart();
     } catch (error) {
         console.error("Error initializing dashboard:", error);
+    }
+}
+
+async function refreshLiveData() {
+    const indicator = document.getElementById('refresh-indicator');
+    if (indicator) indicator.classList.add('spinning');
+    
+    try {
+        await fetchMarketOverview();
+        await fetchDashboardSummary();
+        
+        // If we're looking at a specific stock, refresh it too
+        if (currentViewedTicker && document.getElementById('stock-detail-view').classList.contains('active')) {
+            await fetchStockDetailData(currentViewedTicker);
+        }
+    } catch (error) {
+        console.error("Live refresh failed:", error);
+    } finally {
+        setTimeout(() => {
+            if (indicator) indicator.classList.remove('spinning');
+        }, 1000);
     }
 }
 
@@ -203,18 +282,18 @@ async function fetchMarketOverview() {
     body.innerHTML = '';
 
     stocks.forEach(s => {
-        // Simulated change for visual variety
-        const change = (Math.random() * 10 - 5).toFixed(2);
-        const changePct = (Math.random() * 4 - 2).toFixed(1);
-        const isPositive = change >= 0;
+        const isPositive = s.change > 0;
+        const isNegative = s.change < 0;
+        const colorClass = isPositive ? 'green' : (isNegative ? 'red' : '');
+        const sign = isPositive ? '+' : '';
 
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${s.name}</td>
             <td class="symbol-cell">${s.symbol}</td>
             <td class="price-cell">$${s.price.toFixed(2)}</td>
-            <td class="${isPositive ? 'green' : 'red'}">${isPositive ? '+' : ''}$${change}</td>
-            <td class="${isPositive ? 'green' : 'red'}">${isPositive ? '+' : ''}${changePct}%</td>
+            <td class="${colorClass}">${sign}$${s.change.toFixed(2)}</td>
+            <td class="${colorClass}">${sign}${s.change_pct}%</td>
         `;
         body.appendChild(row);
     });
@@ -288,29 +367,43 @@ async function initMarkets() {
     try {
         const response = await fetch(`${API_BASE}/stocks`);
         allStocks = await response.json();
-        renderMarketsTable(allStocks);
+        currentFilteredStocks = [...allStocks];
+        marketCurrentPage = 1;
+        renderMarketsTable();
     } catch (error) {
         console.error("Error loading markets:", error);
     }
 }
 
-function renderMarketsTable(stocks) {
+function renderMarketsTable() {
     const body = document.getElementById('markets-table-body');
     const countEl = document.getElementById('market-results-count');
     body.innerHTML = '';
+    
+    const stocks = currentFilteredStocks;
     countEl.textContent = `${stocks.length} Stocks Found`;
 
-    stocks.forEach((s, index) => {
-        const isPositive = s.change >= 0;
+    // Pagination logic
+    const startIndex = (marketCurrentPage - 1) * marketItemsPerPage;
+    const endIndex = Math.min(startIndex + marketItemsPerPage, stocks.length);
+    const paginatedStocks = stocks.slice(startIndex, endIndex);
+
+    paginatedStocks.forEach((s, i) => {
+        const actualIndex = startIndex + i + 1;
+        const isPositive = s.change > 0;
+        const isNegative = s.change < 0;
+        const colorClass = isPositive ? 'green' : (isNegative ? 'red' : '');
+        const sign = isPositive ? '+' : '';
+
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${index + 1}</td>
+            <td>${actualIndex}</td>
             <td class="symbol-cell">${s.name}</td>
             <td><span class="trade-type-badge buy">${s.symbol}</span></td>
             <td>${s.sector}</td>
             <td class="price-cell">$${s.price.toFixed(2)}</td>
-            <td class="${isPositive ? 'green' : 'red'}">${isPositive ? '+' : ''}$${s.change.toFixed(2)}</td>
-            <td class="${isPositive ? 'green' : 'red'}">${isPositive ? '+' : ''}${s.change_pct}%</td>
+            <td class="${colorClass}">${sign}$${s.change.toFixed(2)}</td>
+            <td class="${colorClass}">${sign}${s.change_pct}%</td>
             <td>${s.volume}</td>
             <td>
                 <button class="btn btn-outline small" onclick="viewStockDetail('${s.symbol}')">View</button>
@@ -318,6 +411,66 @@ function renderMarketsTable(stocks) {
         `;
         body.appendChild(row);
     });
+
+    renderPagination(stocks.length);
+}
+
+function renderPagination(totalItems) {
+    const pageNumbersContainer = document.getElementById('market-page-numbers');
+    const prevBtn = document.getElementById('market-prev-btn');
+    const nextBtn = document.getElementById('market-next-btn');
+    const pageInfo = document.getElementById('market-page-info');
+    
+    const totalPages = Math.ceil(totalItems / marketItemsPerPage);
+    
+    // Update showing text
+    const startIndex = totalItems > 0 ? (marketCurrentPage - 1) * marketItemsPerPage + 1 : 0;
+    const endIndex = Math.min(marketCurrentPage * marketItemsPerPage, totalItems);
+    pageInfo.textContent = `Showing ${startIndex}-${endIndex} of ${totalItems}`;
+    
+    // Update Previous/Next button states
+    prevBtn.disabled = marketCurrentPage === 1;
+    nextBtn.disabled = marketCurrentPage === totalPages || totalPages === 0;
+
+    prevBtn.onclick = () => {
+        if (marketCurrentPage > 1) {
+            marketCurrentPage--;
+            renderMarketsTable();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    };
+
+    nextBtn.onclick = () => {
+        if (marketCurrentPage < totalPages) {
+            marketCurrentPage++;
+            renderMarketsTable();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    };
+
+    pageNumbersContainer.innerHTML = '';
+    
+    if (totalPages <= 1) {
+        if (totalPages === 1) {
+            const pageNum = document.createElement('span');
+            pageNum.className = 'page-num active';
+            pageNum.textContent = '1';
+            pageNumbersContainer.appendChild(pageNum);
+        }
+        return;
+    }
+
+    for (let i = 1; i <= totalPages; i++) {
+        const pageNum = document.createElement('span');
+        pageNum.className = `page-num ${i === marketCurrentPage ? 'active' : ''}`;
+        pageNum.textContent = i;
+        pageNum.onclick = () => {
+            marketCurrentPage = i;
+            renderMarketsTable();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+        pageNumbersContainer.appendChild(pageNum);
+    }
 }
 
 function filterMarkets() {
@@ -340,10 +493,18 @@ function filterMarkets() {
         return 0;
     });
 
-    renderMarketsTable(filtered);
+    currentFilteredStocks = filtered;
+    marketCurrentPage = 1;
+    renderMarketsTable();
 }
 
 async function viewStockDetail(ticker) {
+    currentViewedTicker = ticker;
+    showView('stock-detail-view');
+    await fetchStockDetailData(ticker);
+}
+
+async function fetchStockDetailData(ticker) {
     try {
         const response = await fetch(`${API_BASE}/stocks/${ticker}`);
         const data = await response.json();
@@ -656,6 +817,8 @@ async function initHistory() {
             stockFilter.innerHTML += `<option value="${s}">${s}</option>`;
         });
 
+        currentFilteredTransactions = [...allTransactions];
+        historyCurrentPage = 1;
         applyHistoryFilters();
     } catch (e) {
         console.error("History load error:", e);
@@ -676,24 +839,36 @@ function applyHistoryFilters() {
         return matchesDate && matchesType && matchesStock;
     });
 
-    renderHistory(filtered);
+    currentFilteredTransactions = filtered;
+    historyCurrentPage = 1;
+    renderHistory();
 }
 
-function renderHistory(data) {
+function renderHistory() {
     const body = document.getElementById('history-table-body');
+    const data = currentFilteredTransactions;
     body.innerHTML = '';
     
     let totalBought = 0;
     let totalSold = 0;
 
-    data.forEach((t, i) => {
+    // Calculate totals on full filtered set
+    data.forEach(t => {
         if (t.type === 'BUY') totalBought += t.total;
         else totalSold += t.total;
+    });
 
+    // Pagination logic
+    const startIndex = (historyCurrentPage - 1) * historyItemsPerPage;
+    const endIndex = Math.min(startIndex + historyItemsPerPage, data.length);
+    const paginatedData = data.slice(startIndex, endIndex);
+
+    paginatedData.forEach((t, i) => {
+        const actualIndex = startIndex + i + 1;
         const row = document.createElement('tr');
         const isGain = t.gain_loss > 0;
         row.innerHTML = `
-            <td>${i + 1}</td>
+            <td>${actualIndex}</td>
             <td>${t.timestamp}</td>
             <td>${t.company || 'Company Name'}</td>
             <td><span class="trade-type-badge buy">${t.symbol}</span></td>
@@ -712,6 +887,35 @@ function renderHistory(data) {
     document.getElementById('hist-total-bought').textContent = `$${totalBought.toLocaleString()}`;
     document.getElementById('hist-total-sold').textContent = `$${totalSold.toLocaleString()}`;
     document.getElementById('hist-count').textContent = `${data.length} Transactions`;
+
+    renderHistoryPagination(data.length);
+}
+
+function renderHistoryPagination(totalItems) {
+    const pageNumbersContainer = document.getElementById('hist-pagination');
+    const pageInfo = document.getElementById('hist-showing-text');
+    
+    const totalPages = Math.ceil(totalItems / historyItemsPerPage);
+    const startIndex = (historyCurrentPage - 1) * historyItemsPerPage + 1;
+    const endIndex = Math.min(historyCurrentPage * historyItemsPerPage, totalItems);
+
+    pageInfo.textContent = `Showing ${totalItems > 0 ? startIndex : 0} to ${endIndex} of ${totalItems} results`;
+    
+    pageNumbersContainer.innerHTML = '';
+    
+    if (totalPages <= 1) return;
+
+    for (let i = 1; i <= totalPages; i++) {
+        const pageNum = document.createElement('div');
+        pageNum.className = `page-num ${i === historyCurrentPage ? 'active' : ''}`;
+        pageNum.textContent = i;
+        pageNum.onclick = () => {
+            historyCurrentPage = i;
+            renderHistory();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+        pageNumbersContainer.appendChild(pageNum);
+    }
 }
 
 function resetHistoryFilters() {
@@ -767,8 +971,10 @@ async function handleRegister(e) {
         const data = await response.json();
         if (response.ok) {
             e.target.reset();
-            showView('auth-login');
-            showToast('Registration successful! Please login.');
+            currentUser = data;
+            localStorage.setItem('user_id', data.user_id);
+            showToast('Account created! Welcome to AI Stock Prediction.');
+            showView('dashboard-view');
         } else {
             showError(errorEl, data.error || "Registration failed");
         }
@@ -819,17 +1025,26 @@ async function checkAuth() {
             const response = await fetch(`${API_BASE}/me/${userId}`);
             if (response.ok) {
                 currentUser = await response.json();
-                updateNavbar();
-                // If on dashboard view, load fresh data
-                if (document.getElementById('dashboard-view').classList.contains('active')) {
-                    initDashboard();
+                
+                // If we are currently on the home view, redirect to dashboard
+                const homeView = document.getElementById('home-view');
+                if (homeView && homeView.classList.contains('active')) {
+                    showView('dashboard-view');
+                } else {
+                    updateNavbar();
                 }
             } else {
                 localStorage.removeItem('user_id');
+                currentUser = null;
+                updateNavbar();
             }
         } catch (e) {
-            console.error("Auth check failed");
+            console.error("Auth check failed:", e);
+            updateNavbar();
         }
+    } else {
+        currentUser = null;
+        updateNavbar();
     }
 }
 
@@ -927,6 +1142,89 @@ async function handleAccountDeactivate() {
     }
 }
 
+// --- Leaderboard Logic ---
+async function initLeaderboard() {
+    try {
+        const response = await fetch(`${API_BASE}/leaderboard`);
+        const data = await response.json();
+        renderLeaderboard(data);
+    } catch (e) {
+        console.error("Leaderboard load error:", e);
+    }
+}
+
+function renderLeaderboard(data) {
+    // 1. Render Podium (Top 3)
+    const podiumData = data.slice(0, 3);
+    
+    // Fill placeholders if less than 3 users
+    for (let i = 0; i < 3; i++) {
+        const rank = i + 1;
+        const user = podiumData[i];
+        
+        const avatarEl = document.getElementById(`podium-${rank}-avatar`);
+        const nameEl = document.getElementById(`podium-${rank}-name`);
+        const returnEl = document.getElementById(`podium-${rank}-return`);
+        const valueEl = document.getElementById(`podium-${rank}-value`);
+        
+        if (user) {
+            avatarEl.textContent = getInitials(user.full_name || user.username);
+            nameEl.textContent = user.full_name || user.username;
+            returnEl.textContent = `${user.return_pct >= 0 ? '+' : ''}${user.return_pct.toFixed(2)}%`;
+            returnEl.className = `return ${user.return_pct >= 0 ? 'green' : 'red'}`;
+            valueEl.textContent = `$${user.portfolio_value.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+        } else {
+            avatarEl.textContent = '--';
+            nameEl.textContent = '---';
+            returnEl.textContent = '0.0%';
+            valueEl.textContent = '$0';
+        }
+    }
+
+    // 2. Render Full Table (All users)
+    const body = document.getElementById('leaderboard-table-body');
+    if (body) {
+        body.innerHTML = '';
+        data.forEach((user, index) => {
+            const row = document.createElement('tr');
+            const isCurrentUser = currentUser && user.user_id === currentUser.user_id;
+            const isPos = user.return_pct >= 0;
+            
+            row.className = isCurrentUser ? 'current-user-row' : '';
+            row.innerHTML = `
+                <td><span class="rank-badge ${index < 3 ? 'rank-' + (index + 1) : ''}">#${index + 1}</span></td>
+                <td>
+                    <div class="user-info">
+                        <div class="avatar-small">${getInitials(user.full_name || user.username)}</div>
+                        <span>${user.full_name || user.username} ${isCurrentUser ? '(You)' : ''}</span>
+                    </div>
+                </td>
+                <td class="font-mono">$${user.portfolio_value.toLocaleString()}</td>
+                <td class="${isPos ? 'green' : 'red'} font-bold">${isPos ? '+' : ''}${user.return_pct.toFixed(2)}%</td>
+                <td>${user.trades}</td>
+                <td><span class="badge ${user.return_pct > 10 ? 'success' : 'neutral'}">${user.return_pct > 10 ? 'Pro' : 'Active'}</span></td>
+            `;
+            body.appendChild(row);
+        });
+    }
+
+    // 3. User Rank Banner
+    if (currentUser) {
+        const userIndex = data.findIndex(u => u.user_id === currentUser.user_id);
+        const userRank = userIndex + 1;
+        const userData = data[userIndex];
+        
+        if (userData) {
+            document.getElementById('user-rank-number').textContent = `#${userRank}`;
+            document.getElementById('user-rank-context').textContent = `#${userRank} out of ${data.length} users`;
+            
+            const returnEl = document.getElementById('user-rank-return');
+            returnEl.textContent = `${userData.return_pct >= 0 ? '+' : ''}${userData.return_pct.toFixed(2)}%`;
+            returnEl.className = userData.return_pct >= 0 ? 'green' : 'red';
+        }
+    }
+}
+
 function showError(el, msg) {
     el.textContent = msg;
     el.classList.remove('hidden');
@@ -938,13 +1236,24 @@ function togglePassword(id) {
 }
 
 // --- Initialization ---
-document.addEventListener('DOMContentLoaded', () => {
-    checkAuth();
+document.addEventListener('DOMContentLoaded', async () => {
+    // Initial UI Setup
+    if (window.lucide) lucide.createIcons();
+    
+    // Ensure loader is visible on start
+    showAppLoader();
+    
+    // Auth Check
+    await checkAuth();
+    
+    // Wait a bit more for a premium feel on initial load
+    setTimeout(hideAppLoader, 800);
     
     document.getElementById('login-form')?.addEventListener('submit', handleLogin);
     document.getElementById('register-form')?.addEventListener('submit', handleRegister);
     document.getElementById('profile-form')?.addEventListener('submit', handleProfileUpdate);
     document.getElementById('password-form')?.addEventListener('submit', handlePasswordUpdate);
     
-    if (window.lucide) lucide.createIcons();
+    // Clear all forms on refresh
+    document.querySelectorAll('form').forEach(form => form.reset());
 });

@@ -1,6 +1,11 @@
 from flask import Blueprint, jsonify, request
 from models import db, User, Stock, Portfolio, Holding, Transaction
 from werkzeug.security import generate_password_hash, check_password_hash
+import finnhub
+from config import Config
+
+# Initialize Finnhub Client
+finnhub_client = finnhub.Client(api_key=Config.FINNHUB_API_KEY)
 
 api_bp = Blueprint('api', __name__)
 
@@ -26,7 +31,14 @@ def register():
     portfolio = Portfolio(user_id=new_user.user_id, cash_balance=10000.00)
     db.session.add(portfolio)
     db.session.commit()
-    return jsonify({'message': 'User registered successfully', 'user_id': new_user.user_id}), 201
+    
+    return jsonify({
+        'message': 'User registered successfully',
+        'user_id': new_user.user_id,
+        'username': new_user.username,
+        'full_name': new_user.full_name,
+        'balance': float(new_user.virtual_balance)
+    }), 201
 
 from sqlalchemy import or_
 
@@ -69,18 +81,40 @@ def get_stocks():
     stocks = Stock.query.all()
     result = []
     for s in stocks:
-        # Simulated data for visual completeness
-        change = (float(s.latest_price) * 0.015) # Simulated 1.5% change
-        change_pct = 1.5
-        volume = "52.4M"
+        try:
+            # Fetch real-time quote from Finnhub
+            print(f"DEBUG: Fetching real-time quote for {s.ticker}...")
+            quote = finnhub_client.quote(s.ticker)
+            
+            if not quote or 'c' not in quote or quote['c'] == 0:
+                print(f"WARNING: Finnhub returned empty data for {s.ticker}. Check API Key/Rate limits.")
+                price = float(s.latest_price)
+                change = 0
+                change_pct = 0
+            else:
+                price = quote.get('c', float(s.latest_price))
+                change = quote.get('d', 0)
+                change_pct = quote.get('dp', 0)
+                print(f"SUCCESS: {s.ticker} | Price: ${price} | Change: ${change} ({change_pct}%)")
+            
+            # Update stock price in DB if it changed significantly
+            if abs(float(s.latest_price) - price) > 0.01:
+                s.latest_price = price
+                db.session.commit()
+        except Exception as e:
+            print(f"ERROR: Finnhub API failure for {s.ticker}: {e}")
+            price = float(s.latest_price)
+            change = 0
+            change_pct = 0
+
         result.append({
             'symbol': s.ticker,
             'name': s.company_name,
             'sector': s.sector or 'Technology',
-            'price': float(s.latest_price),
+            'price': price,
             'change': change,
             'change_pct': change_pct,
-            'volume': volume
+            'volume': "Real-time"
         })
     return jsonify(result)
 
@@ -90,35 +124,66 @@ def get_stock_detail(ticker):
     if not stock:
         return jsonify({'error': 'Stock not found'}), 404
         
-    # Simulated historical data points for the chart
-    base_price = float(stock.latest_price)
-    history = []
-    import random
-    for i in range(30, -1, -1):
-        price = base_price * (1 + (random.random() * 0.1 - 0.05))
-        history.append({
-            'date': f'Mar {31-i if 31-i > 0 else 30}',
-            'price': round(price, 2)
-        })
+    try:
+        # Fetch real-time data from Finnhub
+        quote = finnhub_client.quote(ticker)
+        profile = finnhub_client.company_profile2(symbol=ticker)
         
-    return jsonify({
-        'symbol': stock.ticker,
-        'name': stock.company_name,
-        'sector': stock.sector or 'Technology',
-        'price': base_price,
-        'change': round(base_price * 0.013, 2),
-        'change_pct': 1.3,
-        'volume': '48.2M',
-        '52w_high': round(base_price * 1.2, 2),
-        '52w_low': round(base_price * 0.8, 2),
-        'history': history,
-        'indicators': {
-            'sma20': round(base_price * 0.98, 2),
-            'sma50': round(base_price * 0.95, 2),
-            'rsi': 64.2,
-            'volatility': 'Medium'
-        }
-    })
+        price = quote.get('c', float(stock.latest_price))
+        change = quote.get('d', 0)
+        change_pct = quote.get('dp', 0)
+        
+        # Use profile data if available
+        company_name = profile.get('name', stock.company_name)
+        sector = profile.get('finnhubIndustry', stock.sector or 'Technology')
+        
+        # Simulated historical data points for the chart (Finnhub candles require premium or specific limits)
+        # We'll keep the simulation for history for now, but update the base price
+        base_price = price
+        history = []
+        import random
+        for i in range(30, -1, -1):
+            h_price = base_price * (1 + (random.random() * 0.1 - 0.05))
+            history.append({
+                'date': f'Mar {31-i if 31-i > 0 else 30}',
+                'price': round(h_price, 2)
+            })
+            
+        return jsonify({
+            'symbol': stock.ticker,
+            'name': company_name,
+            'sector': sector,
+            'price': price,
+            'change': change,
+            'change_pct': change_pct,
+            'volume': 'Real-time',
+            '52w_high': quote.get('h', round(price * 1.1, 2)), # Using day high as proxy if 52w not available in free quote
+            '52w_low': quote.get('l', round(price * 0.9, 2)),
+            'history': history,
+            'indicators': {
+                'sma20': round(price * 0.98, 2),
+                'sma50': round(price * 0.95, 2),
+                'rsi': 64.2,
+                'volatility': 'Medium'
+            }
+        })
+    except Exception as e:
+        print(f"Error fetching Finnhub detail for {ticker}: {e}")
+        # Fallback to simulated data if API fails or key is missing
+        base_price = float(stock.latest_price)
+        return jsonify({
+            'symbol': stock.ticker,
+            'name': stock.company_name,
+            'sector': stock.sector or 'Technology',
+            'price': base_price,
+            'change': round(base_price * 0.013, 2),
+            'change_pct': 1.3,
+            'volume': 'Simulated',
+            '52w_high': round(base_price * 1.2, 2),
+            '52w_low': round(base_price * 0.8, 2),
+            'history': [],
+            'indicators': {}
+        })
 
 @api_bp.route('/portfolio/<int:user_id>', methods=['GET'])
 def get_portfolio(user_id):
@@ -351,3 +416,46 @@ def get_leaderboard():
     leaderboard.sort(key=lambda x: x['return_pct'], reverse=True)
     
     return jsonify(leaderboard)
+
+@api_bp.route('/stocks/search', methods=['GET'])
+def search_stocks():
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify([])
+        
+    try:
+        # Use Finnhub symbol lookup
+        search_results = finnhub_client.symbol_lookup(query)
+        results = []
+        for item in search_results.get('result', []):
+            ticker = item.get('symbol')
+            # Check if we already have it
+            stock = Stock.query.filter_by(ticker=ticker).first()
+            if not stock:
+                # Add it to our DB automatically if searched (or just return the info)
+                # For this platform, let's auto-add so users can trade immediately
+                try:
+                    quote = finnhub_client.quote(ticker)
+                    if quote.get('c'): # Ensure it has a price
+                        new_stock = Stock(
+                            ticker=ticker,
+                            company_name=item.get('description', ticker),
+                            latest_price=quote.get('c'),
+                            sector='Technology' # Default or fetch from profile if needed
+                        )
+                        db.session.add(new_stock)
+                        db.session.commit()
+                        stock = new_stock
+                except Exception:
+                    continue # Skip if price fetch fails
+
+            if stock:
+                results.append({
+                    'symbol': stock.ticker,
+                    'name': stock.company_name,
+                    'price': float(stock.latest_price)
+                })
+        return jsonify(results)
+    except Exception as e:
+        print(f"Search error: {e}")
+        return jsonify([])

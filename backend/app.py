@@ -43,7 +43,17 @@ if __name__ == '__main__':
                 Stock(ticker='GOOGL', company_name='Alphabet Inc.', latest_price=140.20, sector='Technology'),
                 Stock(ticker='TSLA', company_name='Tesla, Inc.', latest_price=240.10, sector='Automotive'),
                 Stock(ticker='MSFT', company_name='Microsoft Corporation', latest_price=330.40, sector='Technology'),
-                Stock(ticker='AMZN', company_name='Amazon.com, Inc.', latest_price=135.60, sector='Consumer Cyclical')
+                Stock(ticker='AMZN', company_name='Amazon.com, Inc.', latest_price=135.60, sector='Consumer Cyclical'),
+                Stock(ticker='NVDA', company_name='NVIDIA Corporation', latest_price=450.00, sector='Technology'),
+                Stock(ticker='META', company_name='Meta Platforms, Inc.', latest_price=300.00, sector='Technology'),
+                Stock(ticker='BRK.B', company_name='Berkshire Hathaway Inc.', latest_price=350.00, sector='Finance'),
+                Stock(ticker='V', company_name='Visa Inc.', latest_price=240.00, sector='Finance'),
+                Stock(ticker='JPM', company_name='JPMorgan Chase & Co.', latest_price=150.00, sector='Finance'),
+                Stock(ticker='UNH', company_name='UnitedHealth Group Incorporated', latest_price=500.00, sector='Healthcare'),
+                Stock(ticker='JNJ', company_name='Johnson & Johnson', latest_price=160.00, sector='Healthcare'),
+                Stock(ticker='WMT', company_name='Walmart Inc.', latest_price=160.00, sector='Consumer Defensive'),
+                Stock(ticker='PG', company_name='Procter & Gamble Company', latest_price=150.00, sector='Consumer Defensive'),
+                Stock(ticker='XOM', company_name='Exxon Mobil Corporation', latest_price=110.00, sector='Energy')
             ]
             db.session.bulk_save_objects(stocks)
             db.session.commit()
