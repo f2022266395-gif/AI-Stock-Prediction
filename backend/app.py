@@ -1,14 +1,21 @@
+import os
+import sys
+from dotenv import load_dotenv
+
+BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+ENV_PATH = os.path.join(BASE_DIR, '.env')
+load_dotenv(ENV_PATH, override=True)
+
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 from config import Config
-import os
-import sys
 
 # Ensure backend directory is in path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from models import db, User, Stock, Portfolio
 from routes import api_bp
+from routes.api import predict_stock
 
 def create_app():
     app = Flask(__name__, static_folder=Config.STATIC_FOLDER)
@@ -24,6 +31,10 @@ def create_app():
     @app.route('/')
     def index():
         return send_from_directory(app.static_folder, 'index.html')
+
+    @app.route('/predict')
+    def predict_alias():
+        return predict_stock()
 
     @app.route('/<path:path>')
     def static_proxy(path):
@@ -58,4 +69,4 @@ if __name__ == '__main__':
             db.session.bulk_save_objects(stocks)
             db.session.commit()
             
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5000, use_reloader=False)

@@ -5,3 +5,6 @@ yfinance
 pandas
 python-dotenv
 finnhub-python
+chronos-forecasting
+torch
+numpy

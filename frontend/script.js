@@ -504,25 +504,166 @@ async function viewStockDetail(ticker) {
     await fetchStockDetailData(ticker);
 }
 
+function safeNumber(value, fallback = null) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+}
+
+function formatMoney(value) {
+    const number = safeNumber(value);
+    return number === null ? '---' : `$${number.toFixed(2)}`;
+}
+
+function formatPercent(value) {
+    const number = safeNumber(value);
+    return number === null ? '--' : `${number >= 0 ? '+' : ''}${number.toFixed(2)}%`;
+}
+
+function normalizeHistory(history, currentPrice) {
+    const rows = Array.isArray(history) ? history : [];
+    const cleanRows = rows
+        .map((item, index) => ({
+            date: item.date || `Point ${index + 1}`,
+            price: safeNumber(item.price)
+        }))
+        .filter(item => item.price !== null);
+
+    if (cleanRows.length > 0) return cleanRows;
+
+    const price = safeNumber(currentPrice);
+    return price === null ? [] : [{ date: 'Current', price }];
+}
+
+function averageLast(values, count) {
+    const slice = values.filter(value => value !== null).slice(-count);
+    if (slice.length === 0) return null;
+    return slice.reduce((sum, value) => sum + value, 0) / slice.length;
+}
+
+function setSignalBanner(predictionData, stockData) {
+    const banner = document.getElementById('detail-signal-banner');
+    const signalText = document.getElementById('detail-signal-text');
+    const recommendation = predictionData?.recommendation;
+
+    if (recommendation) {
+        const className = recommendation === 'BUY' ? 'buy' : recommendation === 'SELL' ? 'sell' : 'hold';
+        banner.className = `signal-banner ${className}`;
+        signalText.textContent = `${recommendation} SIGNAL - AI median target implies ${formatPercent(predictionData.percentage_move)} movement.`;
+        return;
+    }
+
+    const changePct = safeNumber(stockData.change_pct, 0);
+    if (changePct > 0.5) {
+        banner.className = 'signal-banner buy';
+        signalText.textContent = 'BUY SIGNAL - Consistent uptrend detected.';
+    } else {
+        banner.className = 'signal-banner hold';
+        signalText.textContent = 'HOLD SIGNAL - Market consolidation period.';
+    }
+}
+
+function renderPredictionPanel(predictionData) {
+    const recommendationEl = document.getElementById('ai-recommendation');
+    const moveEl = document.getElementById('ai-percentage-move');
+    const lowEl = document.getElementById('ai-low-range');
+    const medianEl = document.getElementById('ai-median-target');
+    const highEl = document.getElementById('ai-high-range');
+    const outlookEl = document.getElementById('ai-market-outlook');
+
+    if (!predictionData || predictionData.status !== 'success') {
+        recommendationEl.textContent = 'Prediction Unavailable';
+        recommendationEl.style.color = '';
+        moveEl.textContent = '--';
+        moveEl.className = 'ai-move';
+        lowEl.textContent = '---';
+        medianEl.textContent = '---';
+        highEl.textContent = '---';
+        outlookEl.textContent = 'AI market outlook is unavailable right now. Existing stock data remains active.';
+        return;
+    }
+
+    const move = safeNumber(predictionData.percentage_move, 0);
+    recommendationEl.textContent = predictionData.recommendation || 'HOLD';
+    recommendationEl.style.color = predictionData.recommendation_color || '';
+    moveEl.textContent = formatPercent(move);
+    moveEl.className = `ai-move ${move >= 0 ? 'green' : 'red'}`;
+    lowEl.textContent = formatMoney(predictionData.ai_low_range);
+    medianEl.textContent = formatMoney(predictionData.ai_median_target);
+    highEl.textContent = formatMoney(predictionData.ai_high_range);
+    outlookEl.textContent = predictionData.market_outlook || 'No market outlook narrative was returned.';
+}
+
+function renderIndicators(stockData, predictionData, chartRows) {
+    const prices = chartRows.map(item => item.price);
+    const currentPrice = safeNumber(stockData.price, safeNumber(predictionData?.current_price));
+    const sma20 = safeNumber(stockData.indicators?.sma20, averageLast(prices, 20) ?? currentPrice);
+    const sma50 = safeNumber(stockData.indicators?.sma50, averageLast(prices, 50) ?? currentPrice);
+    const rsi = safeNumber(stockData.indicators?.rsi);
+    const aiHigh = safeNumber(predictionData?.ai_high_range);
+    const aiLow = safeNumber(predictionData?.ai_low_range);
+    const aiSpread = aiHigh !== null && aiLow !== null && currentPrice
+        ? ((aiHigh - aiLow) / currentPrice) * 100
+        : null;
+    const volatility = stockData.indicators?.volatility || (aiSpread === null ? 'N/A' : aiSpread > 5 ? 'High' : aiSpread > 2 ? 'Medium' : 'Low');
+
+    document.getElementById('ind-sma20').textContent = formatMoney(sma20);
+    document.getElementById('ind-sma50').textContent = formatMoney(sma50);
+    document.getElementById('ind-rsi').textContent = rsi === null ? 'N/A' : rsi.toFixed(1);
+    document.getElementById('ind-volatility').textContent = volatility;
+
+    const sma20Status = document.getElementById('ind-sma20-status');
+    const sma50Status = document.getElementById('ind-sma50-status');
+    const sma20Bullish = currentPrice !== null && sma20 !== null && currentPrice >= sma20;
+    const sma50Bullish = currentPrice !== null && sma50 !== null && currentPrice >= sma50;
+    sma20Status.textContent = sma20Bullish ? 'Buy' : 'Watch';
+    sma50Status.textContent = sma50Bullish ? 'Buy' : 'Watch';
+    sma20Status.className = `status ${sma20Bullish ? 'buy' : 'medium'}`;
+    sma50Status.className = `status ${sma50Bullish ? 'buy' : 'medium'}`;
+}
+
 async function fetchStockDetailData(ticker) {
     try {
+        const predictionPromise = fetch(`${API_BASE}/predict?ticker=${encodeURIComponent(ticker)}`)
+            .then(response => response.json())
+            .catch(error => {
+                console.warn('Prediction request failed:', error);
+                return null;
+            });
+
         const response = await fetch(`${API_BASE}/stocks/${ticker}`);
+        if (!response.ok) {
+            throw new Error(`Unable to load stock detail for ${ticker}`);
+        }
+
         const data = await response.json();
+        let predictionData = null;
+
+        const displayPrice = safeNumber(predictionData?.current_price, safeNumber(data.price, 0));
+        const companyName = predictionData?.company_name || data.name || ticker;
+        const sector = predictionData?.industry || data.sector || 'Unknown';
+        const chartRows = normalizeHistory(data.history, displayPrice);
+
+        data.price = displayPrice;
+        data.symbol = data.symbol || ticker;
+        data.name = companyName;
+        data.sector = sector;
         currentStock = data;
         
         // Populate UI
-        document.getElementById('detail-company-name').textContent = data.name;
+        document.getElementById('detail-company-name').textContent = companyName;
         document.getElementById('detail-ticker').textContent = data.symbol;
-        document.getElementById('detail-sector').textContent = data.sector;
-        document.getElementById('detail-price').textContent = `$${data.price.toFixed(2)}`;
+        document.getElementById('detail-sector').textContent = sector;
+        document.getElementById('detail-price').textContent = formatMoney(displayPrice);
         document.getElementById('detail-last-updated').textContent = `Last Updated: ${new Date().toLocaleTimeString()}`;
         
         const changeTxt = document.getElementById('detail-change');
         const changePctTxt = document.getElementById('detail-change-pct');
-        const isPositive = data.change >= 0;
+        const change = safeNumber(data.change, 0);
+        const changePct = safeNumber(data.change_pct, 0);
+        const isPositive = change >= 0;
         
-        changeTxt.textContent = `${isPositive ? '+' : ''}$${data.change.toFixed(2)}`;
-        changePctTxt.textContent = `(${isPositive ? '+' : ''}${data.change_pct}%)`;
+        changeTxt.textContent = `${isPositive ? '+' : ''}$${Math.abs(change).toFixed(2)}`;
+        changePctTxt.textContent = `(${formatPercent(changePct)})`;
         changeTxt.className = isPositive ? 'green' : 'red';
         changePctTxt.className = isPositive ? 'green' : 'red';
 
@@ -536,45 +677,87 @@ async function fetchStockDetailData(ticker) {
             document.getElementById('detail-signal-text').textContent = "NEUTRAL SIGNAL — Market consolidation period.";
         }
 
-        // Stats & Indicators
-        document.getElementById('ind-sma20').textContent = `$${data.indicators.sma20}`;
-        document.getElementById('ind-sma50').textContent = `$${data.indicators.sma50}`;
-        document.getElementById('ind-rsi').textContent = data.indicators.rsi;
-        document.getElementById('ind-volatility').textContent = data.indicators.volatility;
+        setSignalBanner(predictionData, data);
+        renderPredictionPanel(predictionData);
+        renderIndicators(data, predictionData, chartRows);
         
-        document.getElementById('stat-52h').textContent = `$${data['52w_high']}`;
-        document.getElementById('stat-52l').textContent = `$${data['52w_low']}`;
-        document.getElementById('stat-avg-vol').textContent = data.volume;
-        document.getElementById('stat-sector').textContent = data.sector;
+        document.getElementById('stat-52h').textContent = formatMoney(data['52w_high']);
+        document.getElementById('stat-52l').textContent = formatMoney(data['52w_low']);
+        document.getElementById('stat-avg-vol').textContent = data.volume || 'N/A';
+        document.getElementById('stat-sector').textContent = sector;
 
         // Trade Side
-        document.getElementById('trade-stock-name').textContent = data.name;
-        document.getElementById('trade-stock-price').textContent = `$${data.price.toFixed(2)}`;
-        document.getElementById('trade-available-balance').textContent = `$${currentUser.balance.toLocaleString()}`;
+        document.getElementById('trade-stock-name').textContent = companyName;
+        document.getElementById('trade-stock-price').textContent = formatMoney(displayPrice);
+        document.getElementById('trade-available-balance').textContent = `$${safeNumber(currentUser?.balance, 0).toLocaleString()}`;
         
         setTradeType('BUY'); // Reset to buy
         document.getElementById('trade-quantity').value = '';
         updateEstimate();
 
         showView('stock-detail-view');
-        renderDetailChart(data.history);
+        renderDetailChart(chartRows, predictionData);
         lucide.createIcons();
+
+        predictionPromise.then(aiData => {
+            if (currentViewedTicker !== ticker) return;
+
+            const updatedPrice = safeNumber(aiData?.current_price, currentStock.price);
+            currentStock.price = updatedPrice;
+            currentStock.name = aiData?.company_name || currentStock.name;
+            currentStock.sector = aiData?.industry || currentStock.sector;
+
+            if (aiData?.company_name) {
+                document.getElementById('detail-company-name').textContent = aiData.company_name;
+                document.getElementById('trade-stock-name').textContent = aiData.company_name;
+            }
+            if (aiData?.industry) {
+                document.getElementById('detail-sector').textContent = aiData.industry;
+                document.getElementById('stat-sector').textContent = aiData.industry;
+            }
+
+            document.getElementById('detail-price').textContent = formatMoney(updatedPrice);
+            document.getElementById('trade-stock-price').textContent = formatMoney(updatedPrice);
+
+            const updatedRows = normalizeHistory(currentStock.history, updatedPrice);
+            setSignalBanner(aiData, currentStock);
+            renderPredictionPanel(aiData);
+            renderIndicators(currentStock, aiData, updatedRows);
+            renderDetailChart(updatedRows, aiData);
+            updateEstimate();
+            lucide.createIcons();
+        });
     } catch (error) {
         console.error("Error loading stock detail:", error);
+        showToast('Unable to load stock details right now', 'error');
     }
 }
 
-function renderDetailChart(history) {
+function renderDetailChart(history, predictionData = null) {
     const ctx = document.getElementById('detail-history-chart').getContext('2d');
     if (detailChart) detailChart.destroy();
+
+    const chartRows = normalizeHistory(history, currentStock?.price);
+    const labels = chartRows.map(h => h.date);
+    const prices = chartRows.map(h => h.price);
+
+    if (predictionData?.status === 'success') {
+        const low = safeNumber(predictionData.ai_low_range);
+        const median = safeNumber(predictionData.ai_median_target);
+        const high = safeNumber(predictionData.ai_high_range);
+        if (low !== null && median !== null && high !== null) {
+            labels.push('AI Low', 'AI Median', 'AI High');
+            prices.push(low, median, high);
+        }
+    }
 
     detailChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: history.map(h => h.date),
+            labels: labels,
             datasets: [{
-                label: 'Price',
-                data: history.map(h => h.price),
+                label: predictionData?.status === 'success' ? 'Price / AI Forecast' : 'Price',
+                data: prices,
                 borderColor: '#3b82f6',
                 borderWidth: 3,
                 pointRadius: 2,

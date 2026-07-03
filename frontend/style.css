@@ -422,6 +422,68 @@ body {
 }
 .signal-banner.buy { background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
 .signal-banner.sell { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); }
+.signal-banner.hold { background: rgba(245, 158, 11, 0.1); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.2); }
+
+.ai-outlook-panel {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 1.5rem 2rem;
+}
+.ai-outlook-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: 1.25rem;
+}
+.ai-outlook-header .eyebrow {
+    color: var(--text-secondary);
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    margin-bottom: 0.35rem;
+    text-transform: uppercase;
+}
+.ai-outlook-header h2 {
+    font-size: 1.5rem;
+    font-weight: 800;
+}
+.ai-move {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.25rem;
+    font-weight: 800;
+}
+.ai-range-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+.ai-range-item {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1rem;
+}
+.ai-range-item span {
+    color: var(--text-secondary);
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+}
+.ai-range-item strong {
+    color: white;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.15rem;
+}
+#ai-market-outlook {
+    color: var(--text-secondary);
+    line-height: 1.7;
+}
 
 .indicator-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-top: 1.5rem; }
 .indicator-item {
@@ -489,6 +551,7 @@ body {
 @media (max-width: 1100px) {
     .stock-grid { grid-template-columns: 1fr; }
     .indicator-grid { grid-template-columns: repeat(2, 1fr); }
+    .ai-range-grid { grid-template-columns: 1fr; }
 }
 
 /* Portfolio & History Chart Grid */

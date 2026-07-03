@@ -464,6 +464,31 @@
             <span id="detail-signal-text">BUY SIGNAL — SMA20 crossed above SMA50</span>
         </div>
 
+        <div id="ai-outlook-panel" class="ai-outlook-panel" style="margin-bottom: 2.5rem;">
+            <div class="ai-outlook-header">
+                <div>
+                    <span class="eyebrow">AI Forecast</span>
+                    <h2 id="ai-recommendation">Awaiting Prediction</h2>
+                </div>
+                <span id="ai-percentage-move" class="ai-move">--</span>
+            </div>
+            <div class="ai-range-grid">
+                <div class="ai-range-item">
+                    <span>Low Boundary</span>
+                    <strong id="ai-low-range">---</strong>
+                </div>
+                <div class="ai-range-item">
+                    <span>Median Target</span>
+                    <strong id="ai-median-target">---</strong>
+                </div>
+                <div class="ai-range-item">
+                    <span>High Boundary</span>
+                    <strong id="ai-high-range">---</strong>
+                </div>
+            </div>
+            <p id="ai-market-outlook">AI market outlook will appear when prediction data is available.</p>
+        </div>
+
         <div class="stock-grid">
             <div class="stock-main-content">
                 <div class="card chart-card">
@@ -490,12 +515,12 @@
                         <div class="indicator-item">
                             <span class="label">SMA 20</span>
                             <h3 id="ind-sma20">---</h3>
-                            <span class="status buy">Buy</span>
+                            <span id="ind-sma20-status" class="status buy">Buy</span>
                         </div>
                         <div class="indicator-item">
                             <span class="label">SMA 50</span>
                             <h3 id="ind-sma50">---</h3>
-                            <span class="status buy">Buy</span>
+                            <span id="ind-sma50-status" class="status buy">Buy</span>
                         </div>
                         <div class="indicator-item">
                             <span class="label">RSI</span>

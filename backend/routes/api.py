@@ -1,13 +1,205 @@
+import os
+from dotenv import load_dotenv
+
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+ENV_PATH = os.path.join(BASE_DIR, '.env')
+load_dotenv(ENV_PATH, override=True)
+
+FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY', '').strip()
+if not FINNHUB_API_KEY:
+    raise RuntimeError('FINNHUB_API_KEY is not configured in .env or environment.')
+
 from flask import Blueprint, jsonify, request
 from models import db, User, Stock, Portfolio, Holding, Transaction
 from werkzeug.security import generate_password_hash, check_password_hash
 import finnhub
+import yfinance as yf
 from config import Config
+from datetime import datetime, timedelta
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+try:
+    import torch
+except ImportError:
+    torch = None
+
+try:
+    if torch is None:
+        raise ImportError("torch is not installed.")
+    from chronos import ChronosPipeline
+except ImportError:
+    ChronosPipeline = None
 
 # Initialize Finnhub Client
-finnhub_client = finnhub.Client(api_key=Config.FINNHUB_API_KEY)
+finnhub_client = finnhub.Client(api_key=FINNHUB_API_KEY)
 
 api_bp = Blueprint('api', __name__)
+
+# Load the time-series model once at startup so requests only run inference.
+chronos_pipeline = None
+chronos_load_error = None
+if ChronosPipeline is None:
+    chronos_load_error = "chronos-forecasting and torch must be installed."
+elif np is None:
+    chronos_load_error = "numpy must be installed."
+else:
+    try:
+        chronos_pipeline = ChronosPipeline.from_pretrained(
+            "amazon/chronos-t5-base",
+            device_map="cpu",
+            torch_dtype=torch.bfloat16,
+        )
+    except Exception as exc:
+        chronos_load_error = str(exc)
+
+
+def _build_market_outlook(recommendation, ticker, company_name, percentage_move, ai_low, ai_median, ai_high):
+    if recommendation == "BUY":
+        narrative = (
+            "The Chronos time-series distribution is leaning above the live price, "
+            "indicating strong upward breakout momentum that is testing upper "
+            "historical resistance lines."
+        )
+    elif recommendation == "SELL":
+        narrative = (
+            "The Chronos time-series distribution is leaning below the live price, "
+            "showing a downward geometric trajectory that mimics previous "
+            "historical sell-off baselines."
+        )
+    else:
+        narrative = (
+            "The Chronos time-series distribution is clustered near the live price, "
+            "suggesting a stabilization phase with tight horizontal trend behavior "
+            "and low immediate volatility."
+        )
+
+    return (
+        f"{company_name} ({ticker}) receives a {recommendation} rating from the "
+        f"backend rule engine. The 5-day AI median target is ${ai_median:.2f}, "
+        f"with a low volatility boundary of ${ai_low:.2f} and a high volatility "
+        f"boundary of ${ai_high:.2f}. This implies a projected move of "
+        f"{percentage_move:.2f}% from the current live quote. {narrative}"
+    )
+
+
+@api_bp.route('/predict', methods=['GET'])
+def predict_stock():
+    ticker = request.args.get('ticker', '').strip().upper()
+    if not ticker:
+        return jsonify({'status': 'error', 'error': 'Ticker parameter is required'}), 400
+
+    if not FINNHUB_API_KEY:
+        return jsonify({'status': 'error', 'error': 'Finnhub API key is not configured'}), 500
+
+    if chronos_pipeline is None:
+        return jsonify({
+            'status': 'error',
+            'error': 'Chronos model is unavailable',
+            'details': chronos_load_error
+        }), 503
+
+    try:
+        profile = finnhub_client.company_profile2(symbol=ticker) or {}
+        company_name = profile.get('name') or ticker
+        industry = profile.get('finnhubIndustry') or 'Unknown'
+        market_cap = profile.get('marketCapitalization') or 0
+
+        # Fetch history from yfinance for up to the last 1 year
+        historical_prices = []
+        try:
+            yf_history = yf.Ticker(ticker).history(period='1y')
+            historical_prices = [
+                float(price)
+                for price in yf_history['Close'].dropna().tolist()
+                if price is not None and float(price) > 0
+            ]
+            if not historical_prices:
+                raise ValueError('No valid close prices returned from yfinance')
+        except Exception as yfe:
+            print(f"WARNING: yfinance history fetch failed for {ticker}: {yfe}")
+            # Fallback to Finnhub daily candles if yfinance fails
+            now = datetime.utcnow()
+            end_time = int(now.timestamp())
+            start_time = int((now - timedelta(days=500)).timestamp())
+            candles = finnhub_client.stock_candles(ticker, 'D', start_time, end_time) or {}
+            if candles.get('s') == 'ok' and candles.get('c'):
+                historical_prices = [
+                    float(price)
+                    for price in candles.get('c', [])
+                    if price is not None and float(price) > 0
+                ]
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'error': f'No historical data returned for {ticker}'
+                }), 404
+
+        quote = finnhub_client.quote(ticker) or {}
+        current_price = float(quote.get('c') or 0)
+        if current_price <= 0:
+            return jsonify({
+                'status': 'error',
+                'error': f'No live quote returned for {ticker}'
+            }), 404
+
+        if not historical_prices or historical_prices[-1] != current_price:
+            historical_prices.append(current_price)
+
+        context = torch.tensor(historical_prices, dtype=torch.float32)
+
+        forecast = chronos_pipeline.predict(context, prediction_length=5)
+        forecast_array = forecast.detach().cpu().numpy() if hasattr(forecast, 'detach') else np.asarray(forecast)
+        series_samples = forecast_array[0] if forecast_array.ndim == 3 else forecast_array
+
+        low_path, median_path, high_path = np.percentile(series_samples, [10, 50, 90], axis=0)
+        ai_low = float(low_path[-1])
+        ai_median = float(median_path[-1])
+        ai_high = float(high_path[-1])
+
+        percentage_move = ((ai_median - current_price) / current_price) * 100
+        if percentage_move > 1.5:
+            recommendation = "BUY"
+            recommendation_color = "#2ecc71"
+        elif percentage_move < -1.5:
+            recommendation = "SELL"
+            recommendation_color = "#e74c3c"
+        else:
+            recommendation = "HOLD"
+            recommendation_color = "#f1c40f"
+
+        return jsonify({
+            'status': 'success',
+            'company_name': company_name,
+            'industry': industry,
+            'market_cap': market_cap,
+            'current_price': round(current_price, 2),
+            'ai_high_range': round(ai_high, 2),
+            'ai_low_range': round(ai_low, 2),
+            'ai_median_target': round(ai_median, 2),
+            'percentage_move': round(percentage_move, 2),
+            'recommendation': recommendation,
+            'recommendation_color': recommendation_color,
+            'market_outlook': _build_market_outlook(
+                recommendation,
+                ticker,
+                company_name,
+                percentage_move,
+                ai_low,
+                ai_median,
+                ai_high,
+            )
+        })
+    except Exception as exc:
+        print(f"Prediction error for {ticker}: {exc}")
+        return jsonify({
+            'status': 'error',
+            'error': 'Prediction request failed',
+            'details': str(exc)
+        }), 500
 
 @api_bp.route('/register', methods=['POST'])
 def register():
