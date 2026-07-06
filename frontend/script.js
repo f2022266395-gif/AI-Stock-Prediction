@@ -534,6 +534,74 @@ function normalizeHistory(history, currentPrice) {
     return price === null ? [] : [{ date: 'Current', price }];
 }
 
+async function fetchPredictionForTicker(ticker) {
+    try {
+        const response = await fetch(`${API_BASE}/predict?ticker=${encodeURIComponent(ticker)}`);
+        const data = await response.json();
+        return { statusCode: response.status, data };
+    } catch (error) {
+        console.warn('Prediction request failed:', error);
+        return { statusCode: 500, data: null };
+    }
+}
+
+async function pollPredictionForTicker(ticker, attempt = 0) {
+    const { statusCode, data } = await fetchPredictionForTicker(ticker);
+    if (currentViewedTicker !== ticker) return null;
+
+    if (statusCode === 202 || data?.status === 'processing') {
+        renderPredictionPanel({
+            status: 'processing',
+            market_outlook: data?.market_outlook || 'Awaiting prediction generation...',
+        });
+
+        if (attempt < 8) {
+            setTimeout(() => pollPredictionForTicker(ticker, attempt + 1), 2500);
+        }
+        return null;
+    }
+
+    if (data?.status === 'success') {
+        applyPredictionData(data);
+        return data;
+    }
+
+    renderPredictionPanel({
+        status: 'processing',
+        market_outlook: 'Awaiting prediction generation...',
+    });
+    return data;
+}
+
+function applyPredictionData(aiData) {
+    if (!aiData || aiData.status !== 'success' || currentViewedTicker == null) return;
+
+    const updatedPrice = safeNumber(aiData.current_price, currentStock.price);
+    currentStock.price = updatedPrice;
+    currentStock.name = aiData.company_name || currentStock.name;
+    currentStock.sector = aiData.industry || currentStock.sector;
+
+    if (aiData.company_name) {
+        document.getElementById('detail-company-name').textContent = aiData.company_name;
+        document.getElementById('trade-stock-name').textContent = aiData.company_name;
+    }
+    if (aiData.industry) {
+        document.getElementById('detail-sector').textContent = aiData.industry;
+        document.getElementById('stat-sector').textContent = aiData.industry;
+    }
+
+    document.getElementById('detail-price').textContent = formatMoney(updatedPrice);
+    document.getElementById('trade-stock-price').textContent = formatMoney(updatedPrice);
+
+    const updatedRows = normalizeHistory(currentStock.history || [], updatedPrice);
+    setSignalBanner(aiData, currentStock);
+    renderPredictionPanel(aiData);
+    renderIndicators(currentStock, aiData, updatedRows);
+    renderDetailChart(updatedRows, aiData);
+    updateEstimate();
+    lucide.createIcons();
+}
+
 function averageLast(values, count) {
     const slice = values.filter(value => value !== null).slice(-count);
     if (slice.length === 0) return null;
@@ -570,15 +638,17 @@ function renderPredictionPanel(predictionData) {
     const highEl = document.getElementById('ai-high-range');
     const outlookEl = document.getElementById('ai-market-outlook');
 
-    if (!predictionData || predictionData.status !== 'success') {
-        recommendationEl.textContent = 'Prediction Unavailable';
+    if (!predictionData || predictionData.status === 'processing') {
+        recommendationEl.textContent = predictionData?.status === 'processing'
+            ? 'Calculating Daily Forecast...'
+            : 'Awaiting Prediction...';
         recommendationEl.style.color = '';
         moveEl.textContent = '--';
         moveEl.className = 'ai-move';
         lowEl.textContent = '---';
         medianEl.textContent = '---';
         highEl.textContent = '---';
-        outlookEl.textContent = 'AI market outlook is unavailable right now. Existing stock data remains active.';
+        outlookEl.textContent = predictionData?.market_outlook || 'Awaiting prediction generation...';
         return;
     }
 
@@ -623,24 +693,20 @@ function renderIndicators(stockData, predictionData, chartRows) {
 
 async function fetchStockDetailData(ticker) {
     try {
-        const predictionPromise = fetch(`${API_BASE}/predict?ticker=${encodeURIComponent(ticker)}`)
-            .then(response => response.json())
-            .catch(error => {
-                console.warn('Prediction request failed:', error);
-                return null;
-            });
-
         const response = await fetch(`${API_BASE}/stocks/${ticker}`);
         if (!response.ok) {
             throw new Error(`Unable to load stock detail for ${ticker}`);
         }
 
         const data = await response.json();
-        let predictionData = null;
+        let predictionData = {
+            status: 'processing',
+            market_outlook: 'Awaiting prediction generation...',
+        };
 
         const displayPrice = safeNumber(predictionData?.current_price, safeNumber(data.price, 0));
-        const companyName = predictionData?.company_name || data.name || ticker;
-        const sector = predictionData?.industry || data.sector || 'Unknown';
+        const companyName = data.name || ticker;
+        const sector = data.sector || 'Unknown';
         const chartRows = normalizeHistory(data.history, displayPrice);
 
         data.price = displayPrice;
@@ -699,34 +765,23 @@ async function fetchStockDetailData(ticker) {
         renderDetailChart(chartRows, predictionData);
         lucide.createIcons();
 
-        predictionPromise.then(aiData => {
+        (async () => {
+            const initialResponse = await fetchPredictionForTicker(ticker);
             if (currentViewedTicker !== ticker) return;
 
-            const updatedPrice = safeNumber(aiData?.current_price, currentStock.price);
-            currentStock.price = updatedPrice;
-            currentStock.name = aiData?.company_name || currentStock.name;
-            currentStock.sector = aiData?.industry || currentStock.sector;
-
-            if (aiData?.company_name) {
-                document.getElementById('detail-company-name').textContent = aiData.company_name;
-                document.getElementById('trade-stock-name').textContent = aiData.company_name;
-            }
-            if (aiData?.industry) {
-                document.getElementById('detail-sector').textContent = aiData.industry;
-                document.getElementById('stat-sector').textContent = aiData.industry;
+            if (initialResponse.statusCode === 202 || initialResponse.data?.status === 'processing') {
+                renderPredictionPanel({
+                    status: 'processing',
+                    market_outlook: initialResponse.data?.market_outlook || 'Awaiting prediction generation...',
+                });
+                pollPredictionForTicker(ticker);
+                return;
             }
 
-            document.getElementById('detail-price').textContent = formatMoney(updatedPrice);
-            document.getElementById('trade-stock-price').textContent = formatMoney(updatedPrice);
-
-            const updatedRows = normalizeHistory(currentStock.history, updatedPrice);
-            setSignalBanner(aiData, currentStock);
-            renderPredictionPanel(aiData);
-            renderIndicators(currentStock, aiData, updatedRows);
-            renderDetailChart(updatedRows, aiData);
-            updateEstimate();
-            lucide.createIcons();
-        });
+            const aiData = initialResponse.data;
+            if (!aiData) return;
+            applyPredictionData(aiData);
+        })();
     } catch (error) {
         console.error("Error loading stock detail:", error);
         showToast('Unable to load stock details right now', 'error');

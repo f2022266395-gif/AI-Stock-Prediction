@@ -1,13 +1,19 @@
 import os
+import threading
 from dotenv import load_dotenv
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 ENV_PATH = os.path.join(BASE_DIR, '.env')
 load_dotenv(ENV_PATH, override=True)
 
-FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY', '').strip()
-if not FINNHUB_API_KEY:
-    raise RuntimeError('FINNHUB_API_KEY is not configured in .env or environment.')
+def _get_finnhub_api_key():
+    api_key = os.getenv('FINNHUB_API_KEY', '').strip()
+    if not api_key:
+        raise RuntimeError('FINNHUB_API_KEY is not configured in .env or environment.')
+    return api_key
+
+FINNHUB_API_KEY = _get_finnhub_api_key()
+print(f"DEBUG: Loaded FINNHUB_API_KEY prefix={FINNHUB_API_KEY[:4]}... len={len(FINNHUB_API_KEY)}")
 
 from flask import Blueprint, jsonify, request
 from models import db, User, Stock, Portfolio, Holding, Transaction
@@ -34,10 +40,11 @@ try:
 except ImportError:
     ChronosPipeline = None
 
-# Initialize Finnhub Client
-finnhub_client = finnhub.Client(api_key=FINNHUB_API_KEY)
-
+# Use request-local Finnhub client so the latest FINNHUB_API_KEY is always loaded from environment.
 api_bp = Blueprint('api', __name__)
+PREDICTION_CACHE = {}
+PREDICTION_IN_PROGRESS = set()
+PREDICTION_LOCK = threading.Lock()
 
 # Load the time-series model once at startup so requests only run inference.
 chronos_pipeline = None
@@ -86,6 +93,148 @@ def _build_market_outlook(recommendation, ticker, company_name, percentage_move,
     )
 
 
+def _get_finnhub_client():
+    api_key = _get_finnhub_api_key()
+    return finnhub.Client(api_key=api_key)
+
+
+def _fetch_finnhub_profile(ticker):
+    try:
+        client = _get_finnhub_client()
+        return client.company_profile2(symbol=ticker) or {}
+    except Exception as exc:
+        print(f"WARNING: Finnhub profile fetch failed for {ticker}: {exc}")
+        return {}
+
+
+def _fetch_finnhub_quote(ticker):
+    try:
+        client = _get_finnhub_client()
+        quote = client.quote(ticker) or {}
+        current_price = float(quote.get('c') or 0)
+        return current_price, quote
+    except Exception as exc:
+        print(f"WARNING: Finnhub quote fetch failed for {ticker}: {exc}")
+        return 0, {}
+
+
+def _fallback_current_price(ticker):
+    try:
+        stock = Stock.query.filter_by(ticker=ticker).first()
+        if stock and stock.latest_price and float(stock.latest_price) > 0:
+            return float(stock.latest_price)
+    except Exception:
+        pass
+
+    try:
+        recent = yf.Ticker(ticker).history(period='5d')
+        if not recent.empty:
+            latest = recent['Close'].dropna().tolist()
+            if latest:
+                return float(latest[-1])
+    except Exception as exc:
+        print(f"WARNING: yfinance fallback price fetch failed for {ticker}: {exc}")
+
+    return 0
+
+
+def _build_prediction_response(ticker, company_name, industry, market_cap, current_price, ai_low, ai_median, ai_high, percentage_move, recommendation, recommendation_color):
+    return {
+        'status': 'success',
+        'company_name': company_name,
+        'industry': industry,
+        'market_cap': market_cap,
+        'current_price': round(current_price, 2),
+        'ai_high_range': round(ai_high, 2),
+        'ai_low_range': round(ai_low, 2),
+        'ai_median_target': round(ai_median, 2),
+        'percentage_move': round(percentage_move, 2),
+        'recommendation': recommendation,
+        'recommendation_color': recommendation_color,
+        'market_outlook': _build_market_outlook(
+            recommendation,
+            ticker,
+            company_name,
+            percentage_move,
+            ai_low,
+            ai_median,
+            ai_high,
+        )
+    }
+
+
+def _generate_prediction(ticker, company_name, industry, market_cap, current_price):
+    try:
+        historical_prices = []
+        try:
+            yf_history = yf.Ticker(ticker).history(period='1y')
+            historical_prices = [
+                float(price)
+                for price in yf_history['Close'].dropna().tolist()
+                if price is not None and float(price) > 0
+            ]
+            if not historical_prices:
+                raise ValueError('No valid close prices returned from yfinance')
+        except Exception as yfe:
+            print(f"WARNING: yfinance history fetch failed for {ticker}: {yfe}")
+            now = datetime.utcnow()
+            end_time = int(now.timestamp())
+            start_time = int((now - timedelta(days=500)).timestamp())
+            client = _get_finnhub_client()
+            candles = client.stock_candles(ticker, 'D', start_time, end_time) or {}
+            if candles.get('s') == 'ok' and candles.get('c'):
+                historical_prices = [
+                    float(price)
+                    for price in candles.get('c', [])
+                    if price is not None and float(price) > 0
+                ]
+            else:
+                raise RuntimeError(f'No historical data returned for {ticker}')
+
+        context = torch.tensor(historical_prices, dtype=torch.float32)
+        forecast = chronos_pipeline.predict(context, prediction_length=5)
+        forecast_array = forecast.detach().cpu().numpy() if hasattr(forecast, 'detach') else np.asarray(forecast)
+        series_samples = forecast_array[0] if getattr(forecast_array, 'ndim', 0) == 3 else forecast_array
+
+        low_path, median_path, high_path = np.percentile(series_samples, [10, 50, 90], axis=0)
+        ai_low = float(low_path[-1])
+        ai_median = float(median_path[-1])
+        ai_high = float(high_path[-1])
+
+        percentage_move = ((ai_median - current_price) / current_price) * 100 if current_price else 0
+        if percentage_move > 1.5:
+            recommendation = 'BUY'
+            recommendation_color = '#2ecc71'
+        elif percentage_move < -1.5:
+            recommendation = 'SELL'
+            recommendation_color = '#e74c3c'
+        else:
+            recommendation = 'HOLD'
+            recommendation_color = '#f1c40f'
+
+        prediction_response = _build_prediction_response(
+            ticker,
+            company_name,
+            industry,
+            market_cap,
+            current_price,
+            ai_low,
+            ai_median,
+            ai_high,
+            percentage_move,
+            recommendation,
+            recommendation_color,
+        )
+
+        with PREDICTION_LOCK:
+            PREDICTION_CACHE[ticker] = prediction_response
+    except Exception as exc:
+        print(f"Prediction background generation failed for {ticker}: {exc}")
+    finally:
+        with PREDICTION_LOCK:
+            PREDICTION_IN_PROGRESS.discard(ticker)
+
+
 @api_bp.route('/predict', methods=['GET'])
 def predict_stock():
     ticker = request.args.get('ticker', '').strip().upper()
@@ -103,96 +252,62 @@ def predict_stock():
         }), 503
 
     try:
-        profile = finnhub_client.company_profile2(symbol=ticker) or {}
+        with PREDICTION_LOCK:
+            if ticker in PREDICTION_CACHE:
+                return jsonify(PREDICTION_CACHE[ticker])
+            if ticker in PREDICTION_IN_PROGRESS:
+                processing_response = {
+                    'status': 'processing',
+                    'market_outlook': 'Awaiting prediction generation...',
+                }
+                return jsonify(processing_response), 202
+
+        profile = _fetch_finnhub_profile(ticker)
         company_name = profile.get('name') or ticker
         industry = profile.get('finnhubIndustry') or 'Unknown'
         market_cap = profile.get('marketCapitalization') or 0
 
-        # Fetch history from yfinance for up to the last 1 year
-        historical_prices = []
-        try:
-            yf_history = yf.Ticker(ticker).history(period='1y')
-            historical_prices = [
-                float(price)
-                for price in yf_history['Close'].dropna().tolist()
-                if price is not None and float(price) > 0
-            ]
-            if not historical_prices:
-                raise ValueError('No valid close prices returned from yfinance')
-        except Exception as yfe:
-            print(f"WARNING: yfinance history fetch failed for {ticker}: {yfe}")
-            # Fallback to Finnhub daily candles if yfinance fails
-            now = datetime.utcnow()
-            end_time = int(now.timestamp())
-            start_time = int((now - timedelta(days=500)).timestamp())
-            candles = finnhub_client.stock_candles(ticker, 'D', start_time, end_time) or {}
-            if candles.get('s') == 'ok' and candles.get('c'):
-                historical_prices = [
-                    float(price)
-                    for price in candles.get('c', [])
-                    if price is not None and float(price) > 0
-                ]
-            else:
-                return jsonify({
-                    'status': 'error',
-                    'error': f'No historical data returned for {ticker}'
-                }), 404
+        current_price, quote = _fetch_finnhub_quote(ticker)
+        if current_price <= 0:
+            current_price = _fallback_current_price(ticker)
 
-        quote = finnhub_client.quote(ticker) or {}
-        current_price = float(quote.get('c') or 0)
         if current_price <= 0:
             return jsonify({
                 'status': 'error',
                 'error': f'No live quote returned for {ticker}'
             }), 404
 
-        if not historical_prices or historical_prices[-1] != current_price:
-            historical_prices.append(current_price)
+        with PREDICTION_LOCK:
+            if ticker in PREDICTION_CACHE:
+                return jsonify(PREDICTION_CACHE[ticker])
+            if ticker in PREDICTION_IN_PROGRESS:
+                processing_response = {
+                    'status': 'processing',
+                    'market_outlook': 'Awaiting prediction generation...',
+                    'company_name': company_name,
+                    'industry': industry,
+                    'market_cap': market_cap,
+                    'current_price': round(current_price, 2)
+                }
+                return jsonify(processing_response), 202
+            PREDICTION_IN_PROGRESS.add(ticker)
 
-        context = torch.tensor(historical_prices, dtype=torch.float32)
+        thread = threading.Thread(
+            target=_generate_prediction,
+            args=(ticker, company_name, industry, market_cap, current_price),
+            daemon=True
+        )
+        thread.start()
 
-        forecast = chronos_pipeline.predict(context, prediction_length=5)
-        forecast_array = forecast.detach().cpu().numpy() if hasattr(forecast, 'detach') else np.asarray(forecast)
-        series_samples = forecast_array[0] if forecast_array.ndim == 3 else forecast_array
-
-        low_path, median_path, high_path = np.percentile(series_samples, [10, 50, 90], axis=0)
-        ai_low = float(low_path[-1])
-        ai_median = float(median_path[-1])
-        ai_high = float(high_path[-1])
-
-        percentage_move = ((ai_median - current_price) / current_price) * 100
-        if percentage_move > 1.5:
-            recommendation = "BUY"
-            recommendation_color = "#2ecc71"
-        elif percentage_move < -1.5:
-            recommendation = "SELL"
-            recommendation_color = "#e74c3c"
-        else:
-            recommendation = "HOLD"
-            recommendation_color = "#f1c40f"
-
-        return jsonify({
-            'status': 'success',
+        processing_response = {
+            'status': 'processing',
+            'market_outlook': 'Awaiting prediction generation...',
             'company_name': company_name,
             'industry': industry,
             'market_cap': market_cap,
-            'current_price': round(current_price, 2),
-            'ai_high_range': round(ai_high, 2),
-            'ai_low_range': round(ai_low, 2),
-            'ai_median_target': round(ai_median, 2),
-            'percentage_move': round(percentage_move, 2),
-            'recommendation': recommendation,
-            'recommendation_color': recommendation_color,
-            'market_outlook': _build_market_outlook(
-                recommendation,
-                ticker,
-                company_name,
-                percentage_move,
-                ai_low,
-                ai_median,
-                ai_high,
-            )
-        })
+            'current_price': round(current_price, 2)
+        }
+        return jsonify(processing_response), 202
     except Exception as exc:
         print(f"Prediction error for {ticker}: {exc}")
         return jsonify({
@@ -274,22 +389,18 @@ def get_stocks():
     result = []
     for s in stocks:
         try:
-            # Fetch real-time quote from Finnhub
             print(f"DEBUG: Fetching real-time quote for {s.ticker}...")
-            quote = finnhub_client.quote(s.ticker)
-            
-            if not quote or 'c' not in quote or quote['c'] == 0:
-                print(f"WARNING: Finnhub returned empty data for {s.ticker}. Check API Key/Rate limits.")
+            price, quote = _fetch_finnhub_quote(s.ticker)
+            if price <= 0:
+                print(f"WARNING: Finnhub quote unavailable for {s.ticker}. Using stored price.")
                 price = float(s.latest_price)
                 change = 0
                 change_pct = 0
             else:
-                price = quote.get('c', float(s.latest_price))
                 change = quote.get('d', 0)
                 change_pct = quote.get('dp', 0)
                 print(f"SUCCESS: {s.ticker} | Price: ${price} | Change: ${change} ({change_pct}%)")
-            
-            # Update stock price in DB if it changed significantly
+
             if abs(float(s.latest_price) - price) > 0.01:
                 s.latest_price = price
                 db.session.commit()
@@ -317,20 +428,21 @@ def get_stock_detail(ticker):
         return jsonify({'error': 'Stock not found'}), 404
         
     try:
-        # Fetch real-time data from Finnhub
-        quote = finnhub_client.quote(ticker)
-        profile = finnhub_client.company_profile2(symbol=ticker)
-        
-        price = quote.get('c', float(stock.latest_price))
-        change = quote.get('d', 0)
-        change_pct = quote.get('dp', 0)
-        
-        # Use profile data if available
+        price, quote = _fetch_finnhub_quote(ticker)
+        profile = _fetch_finnhub_profile(ticker)
+
+        if price <= 0:
+            print(f"WARNING: Finnhub fallback price used for {ticker}.")
+            price = float(stock.latest_price)
+            change = 0
+            change_pct = 0
+        else:
+            change = quote.get('d', 0)
+            change_pct = quote.get('dp', 0)
+
         company_name = profile.get('name', stock.company_name)
         sector = profile.get('finnhubIndustry', stock.sector or 'Technology')
-        
-        # Simulated historical data points for the chart (Finnhub candles require premium or specific limits)
-        # We'll keep the simulation for history for now, but update the base price
+
         base_price = price
         history = []
         import random
@@ -361,7 +473,6 @@ def get_stock_detail(ticker):
         })
     except Exception as e:
         print(f"Error fetching Finnhub detail for {ticker}: {e}")
-        # Fallback to simulated data if API fails or key is missing
         base_price = float(stock.latest_price)
         return jsonify({
             'symbol': stock.ticker,
@@ -617,7 +728,8 @@ def search_stocks():
         
     try:
         # Use Finnhub symbol lookup
-        search_results = finnhub_client.symbol_lookup(query)
+        client = _get_finnhub_client()
+        search_results = client.symbol_lookup(query)
         results = []
         for item in search_results.get('result', []):
             ticker = item.get('symbol')
@@ -627,7 +739,7 @@ def search_stocks():
                 # Add it to our DB automatically if searched (or just return the info)
                 # For this platform, let's auto-add so users can trade immediately
                 try:
-                    quote = finnhub_client.quote(ticker)
+                    quote = client.quote(ticker)
                     if quote.get('c'): # Ensure it has a price
                         new_stock = Stock(
                             ticker=ticker,
