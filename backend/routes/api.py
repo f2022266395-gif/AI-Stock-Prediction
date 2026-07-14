@@ -21,6 +21,11 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import finnhub
 import yfinance as yf
 from config import Config
+<<<<<<< HEAD
+=======
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time, random
+>>>>>>> 36cfab2f3ba90e364da2551332c66e04e1d25638
 from datetime import datetime, timedelta
 
 try:
@@ -28,6 +33,7 @@ try:
 except ImportError:
     np = None
 
+<<<<<<< HEAD
 try:
     import torch
 except ImportError:
@@ -41,6 +47,82 @@ except ImportError:
     ChronosPipeline = None
 
 # Use request-local Finnhub client so the latest FINNHUB_API_KEY is always loaded from environment.
+=======
+# Price cache: {ticker: {price, change, change_pct, timestamp}}
+_price_cache = {}
+_cache_ttl = 25  # seconds
+
+def _fetch_single_quote(ticker, latest_db_price):
+    try:
+        quote = finnhub_client.quote(ticker)
+        if quote and 'c' in quote and quote['c']:
+            return ticker, {
+                'price': quote.get('c', latest_db_price),
+                'change': quote.get('d', 0),
+                'change_pct': quote.get('dp', 0)
+            }
+    except Exception:
+        pass
+    return ticker, {
+        'price': latest_db_price,
+        'change': 0,
+        'change_pct': 0
+    }
+
+def _get_cached_price(ticker, fallback):
+    cached = _price_cache.get(ticker)
+    now = time.time()
+    if cached and (now - cached['timestamp']) < _cache_ttl:
+        return cached['price']
+    return fallback
+
+def get_all_prices():
+    stocks = Stock.query.all()
+    now = time.time()
+    result = []
+    need_refresh = []
+
+    for s in stocks:
+        cached = _price_cache.get(s.ticker)
+        if cached and (now - cached['timestamp']) < _cache_ttl:
+            result.append({
+                'symbol': s.ticker,
+                'name': s.company_name,
+                'sector': s.sector or 'Technology',
+                'price': cached['price'],
+                'change': cached['change'],
+                'change_pct': cached['change_pct']
+            })
+        else:
+            need_refresh.append(s)
+
+    if need_refresh:
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            futures = {pool.submit(_fetch_single_quote, s.ticker, float(s.latest_price)): s for s in need_refresh}
+            fresh = {}
+            for future in as_completed(futures):
+                ticker, data = future.result()
+                fresh[ticker] = data
+                _price_cache[ticker] = {**data, 'timestamp': time.time()}
+                s = Stock.query.filter_by(ticker=ticker).first()
+                if s and abs(float(s.latest_price) - data['price']) > 0.01:
+                    s.latest_price = data['price']
+                    db.session.commit()
+
+        for s in need_refresh:
+            data = fresh.get(s.ticker, {'price': float(s.latest_price), 'change': 0, 'change_pct': 0})
+            result.append({
+                'symbol': s.ticker,
+                'name': s.company_name,
+                'sector': s.sector or 'Technology',
+                'price': data['price'],
+                'change': data['change'],
+                'change_pct': data['change_pct']
+            })
+
+    return result
+
+>>>>>>> 36cfab2f3ba90e364da2551332c66e04e1d25638
 api_bp = Blueprint('api', __name__)
 PREDICTION_CACHE = {}
 PREDICTION_IN_PROGRESS = set()
@@ -385,6 +467,7 @@ def get_me(user_id):
 
 @api_bp.route('/stocks', methods=['GET'])
 def get_stocks():
+<<<<<<< HEAD
     stocks = Stock.query.all()
     result = []
     for s in stocks:
@@ -409,23 +492,42 @@ def get_stocks():
             price = float(s.latest_price)
             change = 0
             change_pct = 0
+=======
+    prices = get_all_prices()
+    for p in prices:
+        p['volume'] = "Real-time"
+    return jsonify(prices)
+>>>>>>> 36cfab2f3ba90e364da2551332c66e04e1d25638
 
-        result.append({
-            'symbol': s.ticker,
-            'name': s.company_name,
-            'sector': s.sector or 'Technology',
-            'price': price,
-            'change': change,
-            'change_pct': change_pct,
-            'volume': "Real-time"
-        })
-    return jsonify(result)
+@api_bp.route('/market-movers', methods=['GET'])
+def get_market_movers():
+    prices = get_all_prices()
+    movers = sorted(prices, key=lambda x: x['change_pct'], reverse=True)
+    return jsonify({
+        'top_gainers': [m for m in movers if m['change_pct'] > 0][:5],
+        'top_losers': [m for m in movers if m['change_pct'] < 0][-5:][::-1]
+    })
+
+@api_bp.route('/landing', methods=['GET'])
+def get_landing_data():
+    prices = get_all_prices()
+    movers = sorted(prices, key=lambda x: x['change_pct'], reverse=True)
+    for p in prices:
+        p.pop('sector', None)
+    return jsonify({
+        'stocks': prices,
+        'top_gainers': [m for m in movers if m['change_pct'] > 0][:5],
+        'top_losers': [m for m in movers if m['change_pct'] < 0][-5:][::-1]
+    })
 
 @api_bp.route('/stocks/<string:ticker>', methods=['GET'])
 def get_stock_detail(ticker):
     stock = Stock.query.filter_by(ticker=ticker).first()
     if not stock:
         return jsonify({'error': 'Stock not found'}), 404
+    
+    range_days = request.args.get('range', default=30, type=int)
+    range_days = max(1, min(365, range_days))
         
     try:
         price, quote = _fetch_finnhub_quote(ticker)
@@ -442,14 +544,20 @@ def get_stock_detail(ticker):
 
         company_name = profile.get('name', stock.company_name)
         sector = profile.get('finnhubIndustry', stock.sector or 'Technology')
+<<<<<<< HEAD
 
+=======
+        
+        # Simulated historical data points for the chart
+>>>>>>> 36cfab2f3ba90e364da2551332c66e04e1d25638
         base_price = price
         history = []
-        import random
-        for i in range(30, -1, -1):
+        now = datetime.now()
+        for i in range(range_days - 1, -1, -1):
+            day = now - timedelta(days=i)
             h_price = base_price * (1 + (random.random() * 0.1 - 0.05))
             history.append({
-                'date': f'Mar {31-i if 31-i > 0 else 30}',
+                'date': day.strftime('%b %d'),
                 'price': round(h_price, 2)
             })
             
@@ -484,7 +592,10 @@ def get_stock_detail(ticker):
             'volume': 'Simulated',
             '52w_high': round(base_price * 1.2, 2),
             '52w_low': round(base_price * 0.8, 2),
-            'history': [],
+            'history': [{
+                'date': 'N/A',
+                'price': 0
+            }],
             'indicators': {}
         })
 
@@ -493,9 +604,10 @@ def get_portfolio(user_id):
     holdings = Holding.query.filter_by(user_id=user_id).all()
     return jsonify([{
         'symbol': h.stock.ticker,
+        'company': h.stock.company_name,
         'quantity': h.quantity,
         'avg_price': float(h.avg_buy_price),
-        'current_price': float(h.stock.latest_price)
+        'current_price': _get_cached_price(h.stock.ticker, float(h.stock.latest_price))
     } for h in holdings])
 
 @api_bp.route('/dashboard-summary/<int:user_id>', methods=['GET'])
@@ -505,7 +617,7 @@ def get_dashboard_summary(user_id):
         return jsonify({'error': 'User not found'}), 404
         
     holdings = Holding.query.filter_by(user_id=user_id).all()
-    total_holdings_value = sum([float(h.quantity) * float(h.stock.latest_price) for h in holdings])
+    total_holdings_value = sum([float(h.quantity) * _get_cached_price(h.stock.ticker, float(h.stock.latest_price)) for h in holdings])
     portfolio_value = float(user.virtual_balance) + total_holdings_value
     
     # Simple total return calculation (Portfolio Value - Initial $10,000)
@@ -535,6 +647,7 @@ def get_transactions(user_id):
         'price': float(t.price_at_trade),
         'total': float(t.total_amount),
         'gain_loss': float(t.gain_loss or 0),
+        'current_price': _get_cached_price(t.stock.ticker, float(t.stock.latest_price)),
         'timestamp': t.timestamp.strftime('%Y-%m-%d %H:%M')
     } for t in transactions])
 
@@ -719,6 +832,29 @@ def get_leaderboard():
     leaderboard.sort(key=lambda x: x['return_pct'], reverse=True)
     
     return jsonify(leaderboard)
+
+@api_bp.route('/market-news', methods=['GET'])
+def get_market_news():
+    category = request.args.get('category', 'general')
+    try:
+        news = finnhub_client.general_news(category, min_id=0)
+        result = []
+        for article in news[:10]:
+            result.append({
+                'id': article.get('id'),
+                'headline': article.get('headline'),
+                'summary': article.get('summary'),
+                'url': article.get('url'),
+                'image': article.get('image'),
+                'source': article.get('source'),
+                'datetime': article.get('datetime'),
+                'category': article.get('category'),
+                'related': article.get('related')
+            })
+        return jsonify(result)
+    except Exception as e:
+        print(f"Error fetching market news: {e}")
+        return jsonify([])
 
 @api_bp.route('/stocks/search', methods=['GET'])
 def search_stocks():

@@ -5,15 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Stock Prediction | Smart Virtual Trading</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="landing-page">
-    <div class="background-blobs">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-    </div>
 
     <!-- App Loader Overlay -->
     <div id="app-loader" class="app-loader">
@@ -76,50 +72,110 @@
 
     <!-- [HOME VIEW] -->
     <section id="home-view" class="view active">
+
+        <!-- Market Ticker Bar -->
+        <div class="ticker-bar" id="ticker-bar">
+            <div class="ticker-track" id="ticker-track">
+                <!-- Injected by JS -->
+            </div>
+        </div>
+
         <!-- Hero Section -->
         <header class="hero">
             <div class="hero-content">
-                <h1>AI Stock <span>Prediction</span></h1>
-                <p>Learn to predict and trade stocks using advanced virtual simulation. Build your portfolio, analyze market dynamics, and compete with others — all without risking a single dollar.</p>
+                <div class="hero-badge">AI-Powered Virtual Trading Platform</div>
+                <h1>Master the <span>Stock Market</span> Without the Risk</h1>
+                <p>Practice trading with $10,000 in virtual cash. Get AI-powered insights, track your portfolio, and compete with investors worldwide.</p>
                 <div class="hero-btns">
-                    <button onclick="showView('auth-register')" class="btn btn-primary large">Start Trading Now <i data-lucide="arrow-right"></i></button>
-                    <button onclick="showView('dashboard-view')" class="btn btn-secondary large">View Demo Dashboard</button>
+                    <button onclick="showView('auth-register')" class="btn btn-primary large">Start Trading Free <i data-lucide="arrow-right"></i></button>
+                    <button onclick="showView('dashboard-view')" class="btn btn-secondary large">Live Demo</button>
                 </div>
-                <div class="hero-features">
-                    <span><i data-lucide="shield-check" class="success"></i> 100% Risk-Free</span>
-                    <span><i data-lucide="wallet" class="accent"></i> $10,000 Virtual Cash</span>
-                    <span><i data-lucide="trophy" class="warning"></i> Global Leaderboard</span>
+                <div class="hero-stats" id="hero-stats">
+                    <div class="hero-stat">
+                        <span class="hero-stat-value">15+</span>
+                        <span class="hero-stat-label">Stocks</span>
+                    </div>
+                    <div class="hero-stat">
+                        <span class="hero-stat-value">$10K</span>
+                        <span class="hero-stat-label">Virtual Cash</span>
+                    </div>
+                    <div class="hero-stat">
+                        <span class="hero-stat-value">0%</span>
+                        <span class="hero-stat-label">Risk</span>
+                    </div>
                 </div>
             </div>
         </header>
 
+        <!-- Market Movers Section -->
+        <section class="movers-section">
+            <div class="movers-header">
+                <h2>Market Movers</h2>
+                <div class="movers-tabs">
+                    <button class="mover-tab active" onclick="switchMoverTab('gainers')">Top Gainers</button>
+                    <button class="mover-tab" onclick="switchMoverTab('losers')">Top Losers</button>
+                </div>
+            </div>
+            <div class="movers-table-wrap">
+                <table class="movers-table" id="movers-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Name</th>
+                            <th>Price</th>
+                            <th>24h Change</th>
+                        </tr>
+                    </thead>
+                    <tbody id="movers-body">
+                        <!-- Injected by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
         <!-- Features Section -->
         <section class="features">
             <div class="section-title">
-                <h2>Everything You Need to Start</h2>
-                <p>A complete platform for learning stock market investing</p>
+                <h2>Everything You Need to Trade Smarter</h2>
+                <p>A complete platform designed for learning and mastering stock market investing</p>
             </div>
             <div class="features-grid">
                 <div class="feature-card">
                     <div class="icon-box"><i data-lucide="line-chart"></i></div>
-                    <h3>Real-Time Market Data</h3>
-                    <p>Access historical stock data and track market trends with our comprehensive dashboard.</p>
+                    <h3>Real-Time Data</h3>
+                    <p>Live stock prices, market trends, and technical indicators powered by real market data.</p>
                 </div>
                 <div class="feature-card">
                     <div class="icon-box"><i data-lucide="wallet"></i></div>
                     <h3>Virtual Trading</h3>
-                    <p>Start with $10,000 virtual money and practice trading without any real financial risk.</p>
+                    <p>Start with $10,000 in virtual money and practice trading strategies without any financial risk.</p>
                 </div>
                 <div class="feature-card">
                     <div class="icon-box"><i data-lucide="bar-chart-3"></i></div>
                     <h3>Portfolio Analytics</h3>
-                    <p>Track your portfolio performance with detailed charts, allocation breakdowns, and P&L analysis.</p>
+                    <p>Track performance with detailed charts, allocation breakdowns, and profit & loss analysis.</p>
                 </div>
                 <div class="feature-card">
                     <div class="icon-box"><i data-lucide="users"></i></div>
                     <h3>Compete & Learn</h3>
-                    <p>Climb the leaderboard, compete with other investors, and learn from the best traders.</p>
+                    <p>Climb the leaderboard, compete with other investors, and learn from the best performers.</p>
                 </div>
+            </div>
+        </section>
+
+        <!-- News Section -->
+        <section class="news-section" id="news-section">
+            <div class="news-header">
+                <div class="section-title">
+                    <h2>Market News</h2>
+                    <p>Stay informed with the latest financial market updates</p>
+                </div>
+                <a href="#" class="news-view-all" onclick="showView('markets-view'); return false;">
+                    View All <i data-lucide="arrow-right" style="width: 16px; height: 16px;"></i>
+                </a>
+            </div>
+            <div class="news-grid" id="news-grid">
+                <!-- Injected by JS -->
             </div>
         </section>
 
@@ -168,6 +224,7 @@
                 </div>
                 <div class="form-footer">
                     <label class="checkbox-label"><input type="checkbox"> Remember me</label>
+                    <a href="#" class="forgot-link">Forgot password?</a>
                 </div>
                 <div id="login-error" class="error-msg hidden"></div>
                 <button type="submit" class="btn btn-primary full">Sign In</button>
@@ -257,21 +314,24 @@
 
             <!-- Metrics Grid -->
             <div class="metrics-grid">
-                <div class="metric-card">
+                <div class="metric-card blue-card">
+                    <div class="card-glow"></div>
                     <div class="metric-info">
                         <span class="label">Virtual Balance</span>
                         <h2 id="metric-balance">$0.00</h2>
                     </div>
                     <div class="metric-icon blue"><i data-lucide="wallet"></i></div>
                 </div>
-                <div class="metric-card">
+                <div class="metric-card purple-card">
+                    <div class="card-glow"></div>
                     <div class="metric-info">
                         <span class="label">Portfolio Value</span>
                         <h2 id="metric-portfolio-value">$0.00</h2>
                     </div>
-                    <div class="metric-icon green"><i data-lucide="piggy-bank"></i></div>
+                    <div class="metric-icon purple"><i data-lucide="piggy-bank"></i></div>
                 </div>
-                <div class="metric-card">
+                <div class="metric-card green-card">
+                    <div class="card-glow"></div>
                     <div class="metric-info">
                         <span class="label">Total Return</span>
                         <h2 id="metric-return">$0.00</h2>
@@ -279,7 +339,8 @@
                     </div>
                     <div class="metric-icon green"><i data-lucide="trending-up"></i></div>
                 </div>
-                <div class="metric-card">
+                <div class="metric-card amber-card">
+                    <div class="card-glow"></div>
                     <div class="metric-info">
                         <span class="label">Total Trades</span>
                         <h2 id="metric-trades">0 Trades</h2>
@@ -293,10 +354,10 @@
                 <div class="card-header">
                     <h2>Portfolio Performance</h2>
                     <div class="chart-filters">
-                        <button class="filter-btn">1W</button>
-                        <button class="filter-btn">1M</button>
-                        <button class="filter-btn">3M</button>
-                        <button class="filter-btn active">ALL</button>
+                        <button class="filter-btn" onclick="switchDashboardRange(7, this)">1W</button>
+                        <button class="filter-btn" onclick="switchDashboardRange(30, this)">1M</button>
+                        <button class="filter-btn" onclick="switchDashboardRange(90, this)">3M</button>
+                        <button class="filter-btn active" onclick="switchDashboardRange(180, this)">ALL</button>
                     </div>
                 </div>
                 <div class="chart-container">
@@ -304,12 +365,59 @@
                 </div>
             </div>
 
+            <!-- Market Snapshot -->
+            <div class="metrics-grid snapshot-grid">
+                <div class="metric-card green-card">
+                    <div class="card-glow"></div>
+                    <div class="metric-info">
+                        <span class="label">Top Gainer</span>
+                        <h2 id="dash-top-gainer">---</h2>
+                        <span class="sub-label green" id="dash-top-gainer-pct">+0.0%</span>
+                    </div>
+                    <div class="metric-icon green"><i data-lucide="trending-up"></i></div>
+                </div>
+                <div class="metric-card red-card">
+                    <div class="card-glow"></div>
+                    <div class="metric-info">
+                        <span class="label">Top Loser</span>
+                        <h2 id="dash-top-loser">---</h2>
+                        <span class="sub-label red" id="dash-top-loser-pct">0.0%</span>
+                    </div>
+                    <div class="metric-icon red"><i data-lucide="trending-down"></i></div>
+                </div>
+                <div class="metric-card indigo-card">
+                    <div class="card-glow"></div>
+                    <div class="metric-info">
+                        <span class="label">Market Breadth</span>
+                        <h2 id="dash-market-breadth">---</h2>
+                        <span class="sub-label" id="dash-market-breadth-detail" style="color: var(--text-secondary);">Advancers / Decliners</span>
+                    </div>
+                    <div class="metric-icon indigo"><i data-lucide="bar-chart-3"></i></div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="dash-actions">
+                <button class="btn btn-primary" onclick="showView('markets-view')">
+                    <i data-lucide="line-chart"></i> Browse Markets
+                </button>
+                <button class="btn btn-outline" onclick="showView('portfolio-view')">
+                    <i data-lucide="briefcase"></i> View Portfolio
+                </button>
+                <button class="btn btn-outline" onclick="showView('history-view')">
+                    <i data-lucide="history"></i> Trade History
+                </button>
+                <button class="btn btn-outline" onclick="showView('leaderboard-view')">
+                    <i data-lucide="trophy"></i> Leaderboard
+                </button>
+            </div>
+
             <div class="dashboard-bottom-grid">
                 <!-- Your Holdings -->
                 <div class="card table-card">
                     <div class="card-header">
                         <h2>Your Holdings</h2>
-                        <a href="#" class="view-all">View All <i data-lucide="arrow-right"></i></a>
+                        <a href="#" class="view-all" onclick="showView('portfolio-view'); return false;">View All <i data-lucide="arrow-right"></i></a>
                     </div>
                     <div class="table-responsive">
                         <table class="data-table">
@@ -327,41 +435,79 @@
                             </tbody>
                         </table>
                     </div>
+                    <div class="dash-empty-state" id="holdings-empty-state">
+                        <i data-lucide="briefcase"></i>
+                        <p>No holdings yet. Start trading!</p>
+                    </div>
                 </div>
 
-                <!-- Recent Trades -->
-                <div class="card table-card">
+                <!-- Portfolio Allocation + Recent Trades -->
+                <div class="card mix-card">
                     <div class="card-header">
-                        <h2>Recent Trades</h2>
-                        <a href="#" class="view-all">View All <i data-lucide="arrow-right"></i></a>
+                        <h2>Portfolio Mix</h2>
                     </div>
-                    <div class="activity-list" id="trades-list">
-                        <!-- Data will be injected here -->
+                    <div class="mix-content">
+                        <div class="mix-chart-wrap">
+                            <canvas id="dashAllocationChart"></canvas>
+                        </div>
+                        <div class="mix-stats" id="dash-mix-stats">
+                            <div class="mix-stat">
+                                <span class="label">Invested</span>
+                                <span class="value" id="dash-mix-invested">$0.00</span>
+                            </div>
+                            <div class="mix-stat">
+                                <span class="label">Best Performer</span>
+                                <span class="value green" id="dash-mix-best">---</span>
+                            </div>
+                            <div class="mix-stat">
+                                <span class="label">Worst Performer</span>
+                                <span class="value red" id="dash-mix-worst">---</span>
+                            </div>
+                            <div class="mix-stat">
+                                <span class="label">Positions</span>
+                                <span class="value" id="dash-mix-positions">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="recent-trades-wrap" style="">
+                        <div class="card-header" style="margin-bottom: 0.75rem;">
+                            <h2>Recent Trades</h2>
+                            <a href="#" class="view-all" onclick="showView('history-view'); return false;">View All <i data-lucide="arrow-right"></i></a>
+                        </div>
+                        <div class="activity-list compact" id="trades-list">
+                            <!-- Data will be injected here -->
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- Market Overview -->
-            <div class="card table-card full-width">
+            <div class="card full-width dash-market-card">
                 <div class="card-header">
-                    <h2>Market Overview</h2>
-                    <a href="#" class="view-all" onclick="showView('markets-view')">View All Markets <i data-lucide="arrow-right"></i></a>
+                    <div>
+                        <h2>Market Overview <span class="update-badge" id="market-update-time">--</span></h2>
+                    </div>
+                    <a href="#" class="view-all" onclick="showView('markets-view'); return false;">View All <i data-lucide="arrow-right"></i></a>
                 </div>
-                <div class="table-responsive">
-                    <table class="data-table extended">
-                        <thead>
-                            <tr>
-                                <th>Company</th>
-                                <th>Ticker</th>
-                                <th>Price</th>
-                                <th>Change</th>
-                                <th>Change %</th>
-                            </tr>
-                        </thead>
-                        <tbody id="market-overview-body">
-                            <!-- Data will be injected here -->
-                        </tbody>
-                    </table>
+                <div class="dash-market-summary" id="dash-market-summary">
+                    <div class="summary-item"><span class="summary-dot green"></span><span class="summary-label">Advancers</span><span class="summary-value green" id="dash-advancers">0</span></div>
+                    <div class="summary-item"><span class="summary-dot red"></span><span class="summary-label">Decliners</span><span class="summary-value red" id="dash-decliners">0</span></div>
+                    <div class="summary-item"><span class="summary-dot grey"></span><span class="summary-label">Unchanged</span><span class="summary-value" id="dash-unchanged">0</span></div>
+                    <div class="summary-spacer"></div>
+                    <div class="summary-item"><span class="summary-label">Total</span><span class="summary-value" id="dash-total-stocks">0</span></div>
+                </div>
+                <div class="dash-market-list" id="dash-market-list">
+                    <!-- Filled by JS -->
+                </div>
+                <div class="dash-market-footer">
+                    <span class="page-info" id="dash-market-page-info">Showing 0-0 of 0</span>
+                    <div class="page-controls">
+                        <button id="dash-market-prev-btn" class="btn btn-outline small">Previous</button>
+                        <div class="page-numbers" id="dash-market-page-numbers">
+                            <span class="page-num active">1</span>
+                        </div>
+                        <button id="dash-market-next-btn" class="btn btn-outline small">Next</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -374,53 +520,59 @@
             <p>Browse and search historical stock data</p>
         </div>
 
-        <div class="card" style="margin-bottom: 2rem;">
-            <div class="market-controls">
-                <div class="search-box">
-                    <i data-lucide="search"></i>
-                    <input type="text" id="market-search" placeholder="Search by company name or ticker..." oninput="filterMarkets()">
+        <!-- Metric Cards -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-info">
+                    <span class="label">Total Stocks</span>
+                    <h2 id="market-total-stocks">0</h2>
                 </div>
-                <div class="filter-group">
-                    <select id="filter-sector" onchange="filterMarkets()">
-                        <option value="All">All Sectors</option>
-                        <option value="Technology">Technology</option>
-                        <option value="Finance">Finance</option>
-                        <option value="Healthcare">Healthcare</option>
-                        <option value="Energy">Energy</option>
-                    </select>
-                    <select id="sort-by" onchange="filterMarkets()">
-                        <option value="name">Sort by Name</option>
-                        <option value="price">Sort by Price</option>
-                        <option value="change">Sort by Change %</option>
-                        <option value="volume">Sort by Volume</option>
-                    </select>
+                <div class="metric-icon blue"><i data-lucide="bar-chart-3"></i></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-info">
+                    <span class="label">Market Total</span>
+                    <h2 id="market-total-cap">$0</h2>
+                    <span class="sub-label green" id="market-total-cap-sub"></span>
                 </div>
+                <div class="metric-icon green"><i data-lucide="dollar-sign"></i></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-info">
+                    <span class="label">Advancers</span>
+                    <h2 id="market-advancers">0</h2>
+                    <span class="sub-label green" id="market-advancers-pct">+0.0%</span>
+                </div>
+                <div class="metric-icon green"><i data-lucide="trending-up"></i></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-info">
+                    <span class="label">Decliners</span>
+                    <h2 id="market-decliners">0</h2>
+                    <span class="sub-label red" id="market-decliners-pct">0.0%</span>
+                </div>
+                <div class="metric-icon orange"><i data-lucide="trending-down"></i></div>
             </div>
         </div>
 
+        <!-- Market Overview Mini Chart -->
+        <div class="card chart-card">
+            <div class="card-header">
+                <h2>Market Overview</h2>
+                <span class="update-badge" id="market-chart-update-time">--</span>
+            </div>
+            <div class="chart-container" style="height: 220px;">
+                <canvas id="marketOverviewChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Stock Cards Grid -->
         <div class="card">
             <div class="card-header">
                 <h2 id="market-results-count">Loading Markets...</h2>
             </div>
-            <div style="overflow-x: auto;">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Company Name</th>
-                            <th>Ticker</th>
-                            <th>Sector</th>
-                            <th>Price</th>
-                            <th>Change</th>
-                            <th>Change %</th>
-                            <th>Volume</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="markets-table-body">
-                        <!-- Filled by JS -->
-                    </tbody>
-                </table>
+            <div class="stock-cards-grid" id="stock-cards-grid">
+                <!-- Cards rendered by JS -->
             </div>
             <div class="pagination">
                 <div class="page-info" id="market-page-info">Showing 0-0 of 0</div>
@@ -495,11 +647,11 @@
                     <div class="card-header">
                         <h2>Price History</h2>
                         <div class="chart-filters">
-                            <button class="filter-btn">1W</button>
-                            <button class="filter-btn active">1M</button>
-                            <button class="filter-btn">3M</button>
-                            <button class="filter-btn">6M</button>
-                            <button class="filter-btn">1Y</button>
+                            <button class="filter-btn" onclick="switchDetailRange(7, this)">1W</button>
+                            <button class="filter-btn active" onclick="switchDetailRange(30, this)">1M</button>
+                            <button class="filter-btn" onclick="switchDetailRange(90, this)">3M</button>
+                            <button class="filter-btn" onclick="switchDetailRange(180, this)">6M</button>
+                            <button class="filter-btn" onclick="switchDetailRange(365, this)">1Y</button>
                         </div>
                     </div>
                     <div class="chart-container" style="height: 450px;">
@@ -602,10 +754,19 @@
 
     <!-- [PORTFOLIO VIEW] -->
     <section id="portfolio-view" class="view dashboard-page">
-        <div class="profile-header">
-            <h1>My Portfolio</h1>
-            <p>Track your virtual investments and diversification</p>
-        </div>
+        <header class="welcome-card">
+            <div class="welcome-text">
+                <h1>My Portfolio</h1>
+                <p>Track your virtual investments and diversification</p>
+            </div>
+            <div class="header-balance-widget" id="port-summary-widget">
+                <div class="balance-icon-box"><i data-lucide="pie-chart"></i></div>
+                <div class="balance-details">
+                    <span class="label">Portfolio Health</span>
+                    <span class="value" id="port-health">--</span>
+                </div>
+            </div>
+        </header>
 
         <div class="metrics-grid">
             <div class="metric-card">
@@ -630,6 +791,14 @@
                 </div>
                 <div class="metric-icon green"><i data-lucide="trending-up"></i></div>
             </div>
+            <div class="metric-card">
+                <div class="metric-info">
+                    <span class="label">Diversification</span>
+                    <h2 id="port-diversity">0 Stocks</h2>
+                    <span class="sub-label" id="port-diversity-sectors" style="color: var(--text-secondary);">0 Sectors</span>
+                </div>
+                <div class="metric-icon orange"><i data-lucide="shuffle"></i></div>
+            </div>
         </div>
 
         <div class="charts-row">
@@ -644,6 +813,12 @@
             <div class="card chart-card-half">
                 <div class="card-header">
                     <h2>Portfolio Value Over Time</h2>
+                    <div class="chart-filters">
+                        <button class="filter-btn" onclick="switchPortfolioRange(7, this)">1W</button>
+                        <button class="filter-btn" onclick="switchPortfolioRange(30, this)">1M</button>
+                        <button class="filter-btn" onclick="switchPortfolioRange(90, this)">3M</button>
+                        <button class="filter-btn active" onclick="switchPortfolioRange(180, this)">ALL</button>
+                    </div>
                 </div>
                 <div class="chart-container" style="height: 350px;">
                     <canvas id="portPerformanceChart"></canvas>
@@ -651,9 +826,38 @@
             </div>
         </div>
 
+        <!-- Portfolio Stats Bar -->
+        <div class="port-stats-bar">
+            <div class="port-stat">
+                <span class="label">Win Rate</span>
+                <span class="value" id="port-win-rate">--</span>
+            </div>
+            <div class="port-stat-divider"></div>
+            <div class="port-stat">
+                <span class="label">Best Trade</span>
+                <span class="value green" id="port-best-trade">--</span>
+            </div>
+            <div class="port-stat-divider"></div>
+            <div class="port-stat">
+                <span class="label">Worst Trade</span>
+                <span class="value red" id="port-worst-trade">--</span>
+            </div>
+            <div class="port-stat-divider"></div>
+            <div class="port-stat">
+                <span class="label">Avg Return / Trade</span>
+                <span class="value" id="port-avg-return">--</span>
+            </div>
+            <div class="port-stat-divider"></div>
+            <div class="port-stat">
+                <span class="label">Day Change</span>
+                <span class="value" id="port-day-change">--</span>
+            </div>
+        </div>
+
         <div class="card table-card full-width">
             <div class="card-header">
                 <h2>Current Holdings</h2>
+                <span class="update-badge" id="port-holdings-count">0 Stocks</span>
             </div>
             <div class="table-responsive">
                 <table class="data-table">
@@ -665,72 +869,90 @@
                             <th>Avg Price</th>
                             <th>Current</th>
                             <th>Value</th>
+                            <th>Allocation</th>
                             <th>Gain/Loss</th>
-                            <th>%</th>
                             <th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="port-holdings-body">
                         <!-- Filled by JS -->
                     </tbody>
-                    <tfoot>
-                        <tr class="total-row">
-                            <td colspan="5">Total</td>
-                            <td id="port-total-holdings-value">$0.00</td>
-                            <td id="port-total-gain" class="green">+$0.00</td>
-                            <td id="port-total-gain-pct" class="green">+0.00%</td>
-                            <td></td>
-                        </tr>
-                    </tfoot>
                 </table>
             </div>
+            <div class="port-summary-row" id="port-summary-row">
+                <div class="port-summary-item">
+                    <span class="label">Total Value</span>
+                    <span class="value" id="port-total-holdings-value">$0.00</span>
+                </div>
+                <div class="port-summary-item">
+                    <span class="label">Total Gain/Loss</span>
+                    <span class="value" id="port-total-gain">+$0.00</span>
+                </div>
+                <div class="port-summary-item">
+                    <span class="label">Return %</span>
+                    <span class="value" id="port-total-gain-pct">+0.00%</span>
+                </div>
+                <div class="port-summary-item">
+                    <span class="label">Invested Capital</span>
+                    <span class="value" id="port-invested-capital">$0.00</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Empty State -->
+        <div class="port-empty" id="port-empty">
+            <div class="port-empty-icon"><i data-lucide="briefcase"></i></div>
+            <h3>No Holdings Yet</h3>
+            <p>Start building your portfolio by trading stocks from the markets page.</p>
+            <button class="btn btn-primary large" onclick="showView('markets-view')">
+                <i data-lucide="line-chart"></i> Browse Markets
+            </button>
         </div>
     </section>
 
     <!-- [HISTORY VIEW] -->
     <section id="history-view" class="view dashboard-page">
-        <div class="profile-header">
-            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                <div>
-                    <h1>Transaction History</h1>
-                    <p>Complete record of all your trades</p>
-                </div>
-                <button class="btn btn-primary" onclick="exportToCSV()">
-                    <i data-lucide="download"></i> Export to CSV
-                </button>
+        <header class="welcome-card">
+            <div class="welcome-text">
+                <h1>Transaction History</h1>
+                <p>Complete record of all your trades</p>
             </div>
+            <button class="btn btn-primary" onclick="exportToCSV()">
+                <i data-lucide="download"></i> Export CSV
+            </button>
+        </header>
+
+        <!-- Filter Bar -->
+        <div class="hist-filter-bar">
+            <div class="hist-filter-item">
+                <span class="hist-filter-label">From</span>
+                <input type="date" id="history-date-from" class="hist-filter-input">
+            </div>
+            <div class="hist-filter-item">
+                <span class="hist-filter-label">To</span>
+                <input type="date" id="history-date-to" class="hist-filter-input">
+            </div>
+            <div class="hist-filter-item">
+                <span class="hist-filter-label">Type</span>
+                <select id="history-type" class="hist-filter-input">
+                    <option value="All">All</option>
+                    <option value="BUY">Buy</option>
+                    <option value="SELL">Sell</option>
+                </select>
+            </div>
+            <div class="hist-filter-item">
+                <span class="hist-filter-label">Stock</span>
+                <select id="history-stock-filter" class="hist-filter-input">
+                    <option value="All">All Stocks</option>
+                </select>
+            </div>
+            <button class="btn btn-outline small" onclick="resetHistoryFilters()" style="margin-top:18px;">
+                <i data-lucide="rotate-ccw"></i> Reset
+            </button>
         </div>
 
-        <div class="card" style="margin-bottom: 2rem;">
-            <div class="history-filters">
-                <div class="filter-item">
-                    <label>Date From</label>
-                    <input type="date" id="history-date-from">
-                </div>
-                <div class="filter-item">
-                    <label>Date To</label>
-                    <input type="date" id="history-date-to">
-                </div>
-                <div class="filter-item">
-                    <label>Type</label>
-                    <select id="history-type">
-                        <option value="All">All Transactions</option>
-                        <option value="BUY">Buy Only</option>
-                        <option value="SELL">Sell Only</option>
-                    </select>
-                </div>
-                <div class="filter-item">
-                    <label>Stock</label>
-                    <select id="history-stock-filter">
-                        <option value="All">All Stocks</option>
-                        <!-- Dynamic -->
-                    </select>
-                </div>
-                <button class="btn btn-outline" onclick="resetHistoryFilters()">Reset</button>
-            </div>
-        </div>
-
-        <div class="metrics-grid">
+        <!-- Metrics -->
+        <div class="metrics-grid hist-metrics">
             <div class="metric-card">
                 <div class="metric-info">
                     <span class="label">Total Trades</span>
@@ -752,25 +974,35 @@
                 </div>
                 <div class="metric-icon orange"><i data-lucide="trending-down"></i></div>
             </div>
+            <div class="metric-card">
+                <div class="metric-info">
+                    <span class="label">Net P&amp;L</span>
+                    <h2 id="hist-net-pnl">$0.00</h2>
+                    <span class="sub-label" id="hist-net-pnl-pct">0.0%</span>
+                </div>
+                <div class="metric-icon"><i data-lucide="target" style="color:var(--accent-color);background:rgba(37,99,235,0.1);padding:8px;border-radius:12px;width:44px;height:44px;"></i></div>
+            </div>
         </div>
 
+        <!-- Trade Timeline Table -->
         <div class="card table-card">
             <div class="card-header">
                 <h2 id="hist-count">0 Transactions</h2>
+                <span class="update-badge" id="hist-filter-active">All</span>
             </div>
             <div class="table-responsive">
-                <table class="data-table">
+                <table class="data-table history-table">
                     <thead>
                         <tr>
-                            <th>#</th>
+                            <th style="width:40px;"></th>
                             <th>Date & Time</th>
                             <th>Stock</th>
                             <th>Ticker</th>
                             <th>Type</th>
-                            <th>Quantity</th>
+                            <th>Qty</th>
                             <th>Price</th>
                             <th>Total</th>
-                            <th>Gain/Loss</th>
+                            <th>P&amp;L</th>
                         </tr>
                     </thead>
                     <tbody id="history-table-body">
@@ -778,20 +1010,64 @@
                     </tbody>
                 </table>
             </div>
-            <div class="pagination">
-                <span id="hist-showing-text">Showing 0 to 0 of 0 results</span>
+            <div class="hist-pagination">
+                <span id="hist-showing-text">Showing 0-0 of 0</span>
                 <div class="page-numbers" id="hist-pagination">
                     <!-- Dynamic -->
                 </div>
             </div>
         </div>
+
+        <!-- Empty State -->
+        <div class="hist-empty" id="hist-empty">
+            <div class="hist-empty-icon"><i data-lucide="clock"></i></div>
+            <h3>No Transactions Yet</h3>
+            <p>Your trading activity will appear here once you start buying and selling stocks.</p>
+            <button class="btn btn-primary large" onclick="showView('markets-view')">
+                <i data-lucide="line-chart"></i> Start Trading
+            </button>
+        </div>
     </section>
 
     <!-- [LEADERBOARD VIEW] -->
     <section id="leaderboard-view" class="view dashboard-page">
-        <div class="profile-header centered">
-            <h1>Leaderboard</h1>
-            <p>Top performing investors on the platform</p>
+        <header class="welcome-card">
+            <div class="welcome-text">
+                <h1>Leaderboard</h1>
+                <p>Top performing investors on the platform</p>
+            </div>
+            <div class="header-balance-widget" id="leaderboard-summary-widget">
+                <div class="balance-icon-box"><i data-lucide="users"></i></div>
+                <div class="balance-details">
+                    <span class="label">Total Traders</span>
+                    <span class="value" id="lbd-total-users">0</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Leaderboard Stats -->
+        <div class="metrics-grid lbd-metrics">
+            <div class="metric-card">
+                <div class="metric-info">
+                    <span class="label">Top Return</span>
+                    <h2 id="lbd-top-return">+0.0%</h2>
+                </div>
+                <div class="metric-icon green"><i data-lucide="trophy"></i></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-info">
+                    <span class="label">Avg Return</span>
+                    <h2 id="lbd-avg-return">0.0%</h2>
+                </div>
+                <div class="metric-icon blue"><i data-lucide="bar-chart-3"></i></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-info">
+                    <span class="label">Top Portfolio</span>
+                    <h2 id="lbd-top-portfolio">$0</h2>
+                </div>
+                <div class="metric-icon orange"><i data-lucide="briefcase"></i></div>
+            </div>
         </div>
 
         <!-- Podium Section -->
@@ -800,32 +1076,41 @@
                 <div class="medal-icon"><i data-lucide="award"></i></div>
                 <div class="podium-avatar" id="podium-2-avatar">---</div>
                 <h3 id="podium-2-name">---</h3>
-                <span id="podium-2-return" class="return green">+0.0%</span>
+                <div class="podium-return-wrap">
+                    <span id="podium-2-return" class="return green">+0.0%</span>
+                </div>
                 <span id="podium-2-value" class="value">$0</span>
+                <div class="podium-rank-label">2nd</div>
             </div>
             <div class="podium-card rank-1">
                 <div class="medal-icon"><i data-lucide="trophy"></i></div>
                 <div class="podium-avatar" id="podium-1-avatar">---</div>
                 <h3 id="podium-1-name">---</h3>
-                <span id="podium-1-return" class="return green">+0.0%</span>
+                <div class="podium-return-wrap">
+                    <span id="podium-1-return" class="return green">+0.0%</span>
+                </div>
                 <span id="podium-1-value" class="value">$0</span>
+                <div class="podium-rank-label champion">#1</div>
             </div>
             <div class="podium-card rank-3">
                 <div class="medal-icon"><i data-lucide="medal"></i></div>
                 <div class="podium-avatar" id="podium-3-avatar">---</div>
                 <h3 id="podium-3-name">---</h3>
-                <span id="podium-3-return" class="return green">+0.0%</span>
+                <div class="podium-return-wrap">
+                    <span id="podium-3-return" class="return green">+0.0%</span>
+                </div>
                 <span id="podium-3-value" class="value">$0</span>
+                <div class="podium-rank-label">3rd</div>
             </div>
         </div>
 
         <!-- User Current Rank -->
-        <div class="card user-rank-banner">
+        <div class="card user-rank-banner" id="user-rank-banner">
             <div class="rank-info">
-                <h2 id="user-rank-number">#--</h2>
+                <div class="rank-badge-large" id="user-rank-number">#--</div>
                 <div class="details">
                     <h3>Your Current Rank</h3>
-                    <p id="user-rank-context">#-- out of -- users</p>
+                    <p id="user-rank-context">-- out of -- users</p>
                 </div>
             </div>
             <div class="user-stats">
@@ -833,9 +1118,10 @@
                     <span>Your Return</span>
                     <h3 id="user-rank-return" class="green">+0.0%</h3>
                 </div>
-                <button class="btn btn-primary small glow">
-                    <i data-lucide="trending-up"></i> Keep it up!
-                </button>
+                <div class="stat">
+                    <span>Portfolio</span>
+                    <h3 id="user-rank-portfolio" class="green">$0</h3>
+                </div>
             </div>
         </div>
 
@@ -843,17 +1129,18 @@
         <div class="card table-card full-width">
             <div class="card-header">
                 <h2>Full Rankings</h2>
+                <span class="update-badge" id="lbd-count">0 traders</span>
             </div>
             <div class="table-responsive">
-                <table class="data-table">
+                <table class="data-table leaderboard-table">
                     <thead>
                         <tr>
-                            <th>Rank</th>
-                            <th>Username</th>
-                            <th>Portfolio Value</th>
-                            <th>Total Return</th>
-                            <th>Return %</th>
+                            <th style="width:60px;">Rank</th>
+                            <th>Trader</th>
+                            <th>Portfolio</th>
+                            <th>Return</th>
                             <th>Trades</th>
+                            <th>Status</th>
                         </tr>
                     </thead>
                     <tbody id="leaderboard-table-body">
@@ -861,27 +1148,67 @@
                     </tbody>
                 </table>
             </div>
-            <div class="pagination">
-                <span id="leaderboard-showing-text">Showing 1 to 10 of -- users</span>
+            <div class="lbd-pagination">
+                <span id="leaderboard-showing-text">Showing 1-10 of 0</span>
                 <div class="page-numbers" id="leaderboard-pagination">
                     <!-- Dynamic -->
                 </div>
             </div>
+        </div>
+
+        <!-- Empty State -->
+        <div class="lbd-empty" id="lbd-empty">
+            <div class="lbd-empty-icon"><i data-lucide="users"></i></div>
+            <h3>No Rankings Yet</h3>
+            <p>Be the first trader to appear on the leaderboard. Start trading to earn your spot!</p>
+            <button class="btn btn-primary large" onclick="showView('markets-view')">
+                <i data-lucide="line-chart"></i> Start Trading
+            </button>
         </div>
     </section>
 
     <!-- [PROFILE VIEW] -->
     <section id="profile-view" class="view profile-page">
         <div class="profile-container">
-            <header class="profile-header">
-                <h1>Profile Settings</h1>
-                <p>Manage your account details and security settings.</p>
-            </header>
-            
+            <!-- Profile Hero -->
+            <div class="profile-hero">
+                <div class="profile-avatar-wrap">
+                    <div class="profile-avatar" id="profile-avatar-initials">JD</div>
+                    <button class="avatar-edit-btn" title="Change avatar"><i data-lucide="camera"></i></button>
+                </div>
+                <div class="profile-hero-info">
+                    <h1 id="profile-hero-name">John Doe</h1>
+                    <div class="profile-hero-meta">
+                        <span class="profile-badge premium-badge"><i data-lucide="crown"></i> Premium Trader</span>
+                        <span class="profile-badge"><i data-lucide="calendar"></i> Member since Jan 2026</span>
+                        <span class="profile-badge"><i data-lucide="map-pin"></i> Virtual Portfolio</span>
+                    </div>
+                </div>
+                <div class="profile-hero-stats">
+                    <div class="hero-stat">
+                        <span class="hero-stat-value" id="profile-trades-count">0</span>
+                        <span class="hero-stat-label">Trades</span>
+                    </div>
+                    <div class="hero-stat-divider"></div>
+                    <div class="hero-stat">
+                        <span class="hero-stat-value" id="profile-return-display">+0.0%</span>
+                        <span class="hero-stat-label">Return</span>
+                    </div>
+                    <div class="hero-stat-divider"></div>
+                    <div class="hero-stat">
+                        <span class="hero-stat-value" id="profile-rank-display">#--</span>
+                        <span class="hero-stat-label">Rank</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="profile-content">
                 <!-- Settings Card -->
                 <div class="card settings-card">
-                    <h2>Personal Information</h2>
+                    <div class="card-accent-header">
+                        <i data-lucide="user-cog" class="card-accent-icon blue"></i>
+                        <h2>Personal Information</h2>
+                    </div>
                     <form id="profile-form" class="auth-form">
                         <div class="form-group">
                             <label>Full Name</label>
@@ -905,13 +1232,18 @@
                             </div>
                         </div>
                         <div id="profile-error" class="error-msg hidden"></div>
-                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                        <button type="submit" class="btn btn-primary btn-iconed">
+                            <i data-lucide="check-circle"></i> Save Changes
+                        </button>
                     </form>
                 </div>
 
                 <!-- Security Card -->
                 <div class="card security-card">
-                    <h2>Security</h2>
+                    <div class="card-accent-header">
+                        <i data-lucide="shield" class="card-accent-icon green"></i>
+                        <h2>Security</h2>
+                    </div>
                     <form id="password-form" class="auth-form">
                         <div class="form-group">
                             <label>Current Password</label>
@@ -938,14 +1270,19 @@
                             </div>
                         </div>
                         <div id="password-error" class="error-msg hidden"></div>
-                        <button type="submit" class="btn btn-primary">Update Password</button>
+                        <button type="submit" class="btn btn-primary btn-iconed">
+                            <i data-lucide="refresh-cw"></i> Update Password
+                        </button>
                     </form>
                 </div>
 
                 <!-- Danger Zone -->
                 <div class="card danger-card">
-                    <h2>Danger Zone</h2>
-                    <p>Once you deactivate your account, there is no going back. Please be certain.</p>
+                    <div class="card-accent-header danger-accent">
+                        <i data-lucide="alert-triangle" class="card-accent-icon"></i>
+                        <h2>Danger Zone</h2>
+                    </div>
+                    <p class="danger-desc">Once you deactivate your account, there is no going back. Please be certain.</p>
                     <button onclick="handleAccountDeactivate()" class="btn btn-outline danger-btn">
                         <i data-lucide="trash-2"></i> Deactivate My Account
                     </button>
