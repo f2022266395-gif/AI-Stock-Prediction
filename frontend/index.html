@@ -611,9 +611,32 @@
             </div>
         </div>
 
-        <div id="detail-signal-banner" class="signal-banner buy" style="margin-bottom: 2.5rem;">
+        <div id="detail-signal-banner" class="signal-banner buy" style="margin-bottom: 1rem;">
             <i data-lucide="trending-up"></i>
             <span id="detail-signal-text">BUY SIGNAL — SMA20 crossed above SMA50</span>
+        </div>
+
+        <div id="detail-prediction-panel" class="recommendation-summary">
+            <div class="recommendation-item">
+                <span class="label">Trading signal</span>
+                <span id="detail-recommendation" class="value">---</span>
+            </div>
+            <div class="recommendation-item">
+                <span class="label">Suggested shares to buy</span>
+                <span id="detail-suggested-shares" class="value">---</span>
+            </div>
+            <div class="recommendation-item">
+                <span class="label">AI Confidence</span>
+                <span id="detail-confidence" class="value">---</span>
+            </div>
+            <div class="recommendation-item" style="grid-column: 1 / -1;">
+                <span class="label">Why this recommendation</span>
+                <span id="detail-reason" class="value" style="font-size:0.95rem; font-weight:600;">---</span>
+            </div>
+            <div class="recommendation-item">
+                <span class="label">Target price in 5 days</span>
+                <span id="detail-predicted-price" class="value">---</span>
+            </div>
         </div>
 
         <div class="stock-grid">
@@ -636,26 +659,26 @@
 
                 <div class="card" style="margin-bottom: 2rem;">
                     <div class="card-header">
-                        <h2>Technical Indicators</h2>
+                        <h2>What the market is telling you</h2>
                     </div>
                     <div class="indicator-grid">
                         <div class="indicator-item">
-                            <span class="label">SMA 20</span>
+                            <span class="label">Short-term trend</span>
                             <h3 id="ind-sma20">---</h3>
                             <span class="status buy">Buy</span>
                         </div>
                         <div class="indicator-item">
-                            <span class="label">SMA 50</span>
+                            <span class="label">Mid-term trend</span>
                             <h3 id="ind-sma50">---</h3>
                             <span class="status buy">Buy</span>
                         </div>
                         <div class="indicator-item">
-                            <span class="label">RSI</span>
+                            <span class="label">Buy/Sell pressure</span>
                             <h3 id="ind-rsi">---</h3>
                             <span class="status normal">Normal</span>
                         </div>
                         <div class="indicator-item">
-                            <span class="label">Volatility</span>
+                            <span class="label">Price movement speed</span>
                             <h3 id="ind-volatility">---</h3>
                             <span class="status medium">Medium</span>
                         </div>
@@ -664,23 +687,24 @@
 
                 <div class="card">
                     <div class="card-header">
-                        <h2>Stock Statistics</h2>
+                        <h2>Quick facts</h2>
                     </div>
+                    <p class="card-subtext">Easy reference points for what the stock has done over the past year and what kind of industry it belongs to.</p>
                     <div class="stats-grid">
                         <div class="stat-item">
-                            <span class="label">52 Week High</span>
+                            <span class="label">Highest price this year</span>
                             <span id="stat-52h" class="value">---</span>
                         </div>
                         <div class="stat-item">
-                            <span class="label">52 Week Low</span>
+                            <span class="label">Lowest price this year</span>
                             <span id="stat-52l" class="value">---</span>
                         </div>
                         <div class="stat-item">
-                            <span class="label">Average Volume</span>
+                            <span class="label">Typical daily trading volume</span>
                             <span id="stat-avg-vol" class="value">---</span>
                         </div>
                         <div class="stat-item">
-                            <span class="label">Market Sector</span>
+                            <span class="label">Industry group</span>
                             <span id="stat-sector" class="value">---</span>
                         </div>
                     </div>

@@ -1199,6 +1199,48 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-display); }
 .signal-banner.buy { background: rgba(5, 150, 105, 0.1); color: var(--success); border: 1px solid rgba(5, 150, 105, 0.2); }
 .signal-banner.sell { background: rgba(220, 38, 38, 0.1); color: var(--danger); border: 1px solid rgba(220, 38, 38, 0.2); }
 
+#detail-prediction-panel {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.recommendation-summary .recommendation-item {
+    background: rgba(255, 255, 255, 0.9);
+    padding: 1.25rem 1.5rem;
+    border-radius: 18px;
+    border: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.recommendation-summary .recommendation-item .label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 700;
+}
+
+.recommendation-summary .recommendation-item .value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--text-default);
+}
+
+.recommendation-summary .recommendation-item #detail-confidence {
+    color: var(--accent-color);
+}
+
+.recommendation-summary .recommendation-item #detail-reason {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    display: block;
+    line-height: 1.3;
+}
+
 .indicator-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-top: 1.5rem; }
 .indicator-item {
     background: rgba(0, 0, 0, 0.02);
@@ -1213,6 +1255,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-display); }
 .indicator-item .status.buy { background: rgba(5, 150, 105, 0.15); color: var(--success); }
 .indicator-item .status.normal { background: rgba(37, 99, 235, 0.15); color: var(--accent-color); }
 .indicator-item .status.medium { background: rgba(217, 119, 6, 0.15); color: var(--warning); }
+.card-subtext { color: var(--text-secondary); margin-top: 0.75rem; font-size: 0.95rem; line-height: 1.5; }
 
 .stats-grid { display: grid; grid-template-columns: repeat(2, 2fr); gap: 1.5rem; margin-top: 1.5rem; }
 .stat-item {

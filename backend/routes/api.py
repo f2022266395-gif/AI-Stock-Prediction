@@ -1,11 +1,34 @@
 from flask import Blueprint, jsonify, request
-from models import db, User, Stock, Portfolio, Holding, Transaction
 from werkzeug.security import generate_password_hash, check_password_hash
 import finnhub
-from config import Config
+import torch
+import numpy as np
+import pandas as pd
+import yfinance as yf
+from scipy.stats import linregress
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time, random
 from datetime import datetime, timedelta
+
+from ..config import Config
+from ..models import db, User, Stock, Portfolio, Holding, Transaction
+
+# Safe, defensive imports for Chronos
+CHRONOS_AVAILABLE = False
+ChronosClass = None
+try:
+    from chronos import ChronosBoltPipeline
+    ChronosClass = ChronosBoltPipeline
+    CHRONOS_AVAILABLE = True
+    print("AI-Prediction: Successfully loaded ChronosBoltPipeline")
+except ImportError:
+    try:
+        from chronos import ChronosPipeline
+        ChronosClass = ChronosPipeline
+        CHRONOS_AVAILABLE = True
+        print("AI-Prediction: Fallback loaded ChronosPipeline")
+    except ImportError as e:
+        print(f"AI-Prediction WARNING: Chronos pipelines not importable. Error: {e}")
 
 # Initialize Finnhub Client
 finnhub_client = finnhub.Client(api_key=Config.FINNHUB_API_KEY)
@@ -37,6 +60,231 @@ def _get_cached_price(ticker, fallback):
     if cached and (now - cached['timestamp']) < _cache_ttl:
         return cached['price']
     return fallback
+
+
+def calculate_rsi(prices, period=14):
+    if len(prices) < period + 1:
+        return 50.0
+
+    deltas = np.diff(prices)
+    seed = deltas[:period]
+    up = seed[seed >= 0].sum() / period
+    down = -seed[seed < 0].sum() / period
+    rs = up / (down if down != 0 else 0.00001)
+    rsi = np.zeros_like(prices, dtype=float)
+    rsi[:period] = 100.0 - 100.0 / (1.0 + rs)
+
+    for i in range(period, len(prices)):
+        delta = deltas[i - 1]
+        if delta > 0:
+            up_val = delta
+            down_val = 0.0
+        else:
+            up_val = 0.0
+            down_val = -delta
+        up = (up * (period - 1) + up_val) / period
+        down = (down * (period - 1) + down_val) / period
+        rs = up / (down if down != 0 else 0.00001)
+        rsi[i] = 100.0 - 100.0 / (1.0 + rs)
+
+    return float(rsi[-1])
+
+
+def get_chronos_pipeline():
+    if not CHRONOS_AVAILABLE or ChronosClass is None:
+        return None
+    try:
+        model_name = "amazon/chronos-bolt-tiny" if ChronosClass.__name__ == "ChronosBoltPipeline" else "amazon/chronos-t5-tiny"
+        pipeline = ChronosClass.from_pretrained(
+            model_name,
+            device_map="cpu",
+            torch_dtype=torch.float32,
+        )
+        return pipeline
+    except Exception as e:
+        print(f"AI-Prediction WARNING: Chronos pipeline could not be loaded: {e}")
+        return None
+
+
+def get_ensemble_recommendation(ticker_symbol, user_cash, user_holdings, historical_data, live_price=None, fallback_used=False):
+    # Allow callers to pass None - if so and live_price is provided, build a synthetic history
+    if historical_data is None or historical_data.empty or 'Close' not in historical_data.columns:
+        if live_price is None:
+            return {"error": "No historical data found"}
+        # build synthetic history using live_price
+        days = 60
+        dates = pd.date_range(end=pd.Timestamp.today(), periods=days)
+        historical_data = pd.DataFrame({'Close': [float(live_price)] * days}, index=dates)
+
+    close_prices = historical_data['Close'].dropna().astype(float)
+    if close_prices.empty:
+        return {"error": "No historical data found"}
+
+    current_price = float(live_price) if live_price else float(close_prices.iloc[-1])
+    current_price = max(current_price, 0.01)
+    n_days = len(close_prices)
+
+    # --- Linear Regression Trend ---
+    regression_window = min(30, n_days)
+    x = np.arange(regression_window)
+    y = close_prices.iloc[-regression_window:].values
+    slope, intercept, _, _, _ = linregress(x, y)
+    regression_forecast = current_price + (slope * 5.0)
+
+    # --- EMA Momentum ---
+    ema_12 = close_prices.ewm(span=12, adjust=False).mean().iloc[-1]
+    ema_26 = close_prices.ewm(span=26, adjust=False).mean().iloc[-1]
+    ema_momentum = float(ema_12 - ema_26)
+    ema_forecast = current_price + (ema_momentum * 1.5)
+
+    # --- MACD / RSI Indicators ---
+    macd_line = close_prices.ewm(span=12, adjust=False).mean() - close_prices.ewm(span=26, adjust=False).mean()
+    signal_line = macd_line.ewm(span=9, adjust=False).mean()
+    macd_hist = macd_line - signal_line
+    macd_signal = float(macd_line.iloc[-1] - signal_line.iloc[-1])
+
+    # Handle constant/synthetic series: avoid spurious RSI=0
+    synthetic_series = np.allclose(close_prices, close_prices.iloc[0]) if len(close_prices) > 0 else False
+    if synthetic_series:
+        rsi_value = 50.0
+    else:
+        delta = close_prices.diff()
+        gain = delta.clip(lower=0).rolling(window=14).mean()
+        loss = -delta.clip(upper=0).rolling(window=14).mean()
+        rs = gain / (loss + 1e-9)
+        rsi_value = float(round(100 - (100 / (1 + rs.iloc[-1])), 2)) if len(rs.dropna()) > 0 else 50.0
+
+    chronos_forecast_val = None
+    pipeline = get_chronos_pipeline()
+    if pipeline is not None:
+        try:
+            context = torch.tensor(close_prices.values[-60:], dtype=torch.float32)
+            if context.ndim == 1:
+                context = context.unsqueeze(0)
+            forecast = pipeline.predict(context, 5)
+            if isinstance(forecast, (list, tuple)) and len(forecast) > 0:
+                forecast_data = forecast[0]
+            else:
+                forecast_data = forecast
+            forecast_arr = np.asarray(forecast_data, dtype=float)
+            if forecast_arr.ndim == 2:
+                chronos_forecast_val = float(np.median(forecast_arr, axis=0)[-1])
+            else:
+                chronos_forecast_val = float(np.ravel(forecast_arr)[-1])
+        except Exception as e:
+            print(f"AI-Prediction WARNING: Chronos forecast failed: {e}")
+            chronos_forecast_val = None
+
+    if chronos_forecast_val is not None:
+        predicted_price_5d = (0.40 * chronos_forecast_val) + (0.40 * ema_forecast) + (0.20 * regression_forecast)
+    else:
+        predicted_price_5d = (0.60 * ema_forecast) + (0.40 * regression_forecast)
+
+    max_deviation = current_price * 0.15
+    predicted_price_5d = float(np.clip(predicted_price_5d, current_price - max_deviation, current_price + max_deviation))
+    predicted_price_5d = float(round(predicted_price_5d, 2))
+
+    price_change_pct = ((predicted_price_5d - current_price) / current_price) * 100.0
+    recommendation = "HOLD"
+
+    if price_change_pct >= 4.0 and rsi_value < 70:
+        recommendation = "BUY"
+    elif price_change_pct >= 1.5 and rsi_value < 65:
+        recommendation = "BUY"
+    elif (not synthetic_series) and rsi_value < 30 and price_change_pct > -2.0:
+        # only treat oversold-as-buy if we have real history
+        recommendation = "BUY"
+    elif price_change_pct <= -2.0 or (rsi_value > 75 and price_change_pct < -1.0):
+        recommendation = "SELL"
+    elif price_change_pct <= -1.5 and macd_signal < 0:
+        recommendation = "SELL"
+
+    # If history is synthetic/flat, prefer HOLD unless there is clear loss signal
+    if synthetic_series and recommendation == "BUY":
+        recommendation = "HOLD"
+
+    suggested_shares = 0
+    action = recommendation
+    # Suggest buy quantity limited by available cash (max 20% of cash)
+    if recommendation == "BUY":
+        try:
+            available_cash = float(user_cash)
+            max_commit = available_cash * 0.20
+            suggested_shares = int(max_commit // current_price)
+            if suggested_shares <= 0:
+                # Not enough cash to buy at least one share
+                action = "HOLD"
+        except Exception:
+            suggested_shares = 0
+            action = "HOLD"
+
+    # If recommendation is SELL, ensure user actually holds shares before suggesting any sells
+    suggested_sell_qty = 0
+    if recommendation == "SELL":
+        if int(user_holdings) <= 0:
+            action = "HOLD"
+        else:
+            # Determine sell fraction based on signal strength
+            sell_fraction = 0.25  # default partial sell
+            # Strong sell conditions increase sell fraction
+            if price_change_pct <= -4.0 or rsi_value > 85 or macd_signal < -0.5:
+                sell_fraction = 0.75
+            elif price_change_pct <= -2.5 or rsi_value > 80 or macd_signal < -0.2:
+                sell_fraction = 0.5
+            suggested_sell_qty = max(1, int(user_holdings * sell_fraction))
+            suggested_shares = suggested_sell_qty
+
+    step_values = np.linspace(current_price, predicted_price_5d, 5)[1:]
+    forecast_series = [float(round(x, 2)) for x in step_values]
+
+    # Confidence scoring (0-100)
+    try:
+        conf_from_price = min(50, abs(price_change_pct) * 5)
+        conf_from_rsi = min(30, abs(rsi_value - 50) * 0.6)
+        conf_from_macd = min(20, abs(macd_signal) * 10)
+        confidence = int(min(100, conf_from_price + conf_from_rsi + conf_from_macd))
+    except Exception:
+        confidence = 50
+
+    # Human-readable reason
+    if price_change_pct > 0.2:
+        change_text = f"AI projects positive growth (+{round(price_change_pct, 2)}%) over the next 5 days."
+    elif price_change_pct < -0.2:
+        change_text = f"AI projects a downward correction ({round(price_change_pct, 2)}%) over the next 5 days."
+    else:
+        change_text = "AI projects stable/sideways movement over the next 5 days."
+
+    if rsi_value > 70:
+        momentum_text = "Overheated (High Selling Pressure)"
+    elif rsi_value < 30:
+        momentum_text = "Oversold (Potential Buy Zone)"
+    elif rsi_value >= 55:
+        momentum_text = "Strong Momentum"
+    elif rsi_value < 45:
+        momentum_text = "Weak Momentum"
+    else:
+        momentum_text = "Steady & Neutral"
+
+    trend_text = "Upward Trend Strength" if macd_signal >= 0 else "Downward Trend Correction"
+    reason = f"{change_text} Market Momentum is {momentum_text} with an {trend_text}."
+
+    if fallback_used:
+        reason += " Data fallback was used for this estimate."
+
+    return {
+        "current_price": current_price,
+        "predicted_price_5d": predicted_price_5d,
+        "rsi": float(rsi_value),
+        "macd_signal": float(macd_signal),
+        "recommendation": recommendation,
+        "action": action,
+        "suggested_qty": int(suggested_shares),
+        "reason": reason,
+        "confidence": confidence,
+        "fallback_used": bool(fallback_used),
+        "forecast_series": forecast_series
+    }
+
 
 def get_all_prices():
     stocks = Stock.query.all()
@@ -253,6 +501,160 @@ def get_stock_detail(ticker):
             }],
             'indicators': {}
         })
+
+
+@api_bp.route('/predict/<string:ticker>', methods=['GET'])
+def get_stock_prediction(ticker):
+    user_id = request.args.get('user_id', type=int)
+    range_days = request.args.get('range', default=30, type=int)
+    range_days = max(1, min(365, range_days))
+
+    if not user_id:
+        return jsonify({'error': 'user_id parameter is required'}), 400
+
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    stock = Stock.query.filter_by(ticker=ticker).first()
+    if not stock:
+        return jsonify({'error': 'Stock not found'}), 404
+
+    portfolio = Portfolio.query.filter_by(user_id=user_id).first()
+    cash_balance = float(portfolio.cash_balance) if portfolio else float(user.virtual_balance)
+    holding = Holding.query.filter_by(user_id=user_id, stock_id=stock.stock_id).first()
+    user_holdings = int(holding.quantity) if holding else 0
+
+    # Try multiple ticker symbol variants (e.g., BRK.B -> BRK-B) to handle delisted or alternate symbols
+    variants = [ticker, ticker.replace('.', '-'), ticker.replace('.', ''), ticker.replace('.', '/')] if isinstance(ticker, str) else [ticker]
+    hist = pd.DataFrame()
+    used_symbol = None
+    for sym in variants:
+        try:
+            t_obj = yf.Ticker(sym)
+            h = t_obj.history(period=f'{max(range_days, 60)}d')
+            if not h.empty and 'Close' in h.columns:
+                hist = h
+                used_symbol = sym
+                break
+        except Exception as e:
+            # ignore and try next variant
+            print(f"Yahoo fetch variant {sym} failed: {e}")
+
+    # If no historical data found, fall back to a synthetic series using DB latest price
+    fallback_used = False
+    if hist.empty or 'Close' not in hist.columns:
+        print(f"No historical data for {ticker} (tried {variants}). Using DB fallback price series.")
+        base_price = float(stock.latest_price)
+        days = max(range_days, 60)
+        dates = pd.date_range(end=pd.Timestamp.today(), periods=days)
+        hist = pd.DataFrame({'Close': [base_price] * days}, index=dates)
+        fallback_used = True
+
+    close_prices = hist['Close'].dropna().astype(float).values
+    if len(close_prices) == 0:
+        return jsonify({'error': 'No valid close prices found'}), 404
+
+    try:
+        quote = finnhub_client.quote(ticker)
+        current_price = float(quote.get('c', close_prices[-1]))
+        change = float(quote.get('d', 0))
+        change_pct = float(quote.get('dp', 0))
+        volume_val = quote.get('v', 'Real-time')
+    except Exception as e:
+        print(f"Finnhub quote failed for {ticker}: {e}")
+        current_price = float(close_prices[-1])
+        change = 0.0
+        change_pct = 0.0
+        volume_val = 'Real-time'
+
+    current_price = max(current_price, 0.01)
+    rsi_value = calculate_rsi(close_prices)
+
+    history_prices = close_prices[-range_days:]
+    history = []
+    for i, price in enumerate(history_prices):
+        history.append({
+            'date': hist.index[-range_days + i].strftime('%b %d'),
+            'price': float(price)
+        })
+
+    try:
+        profile = finnhub_client.company_profile2(symbol=ticker)
+    except Exception:
+        profile = {}
+
+    company_name = profile.get('name', stock.company_name)
+    sector = profile.get('finnhubIndustry', stock.sector or 'Technology')
+
+    recommendation_result = get_ensemble_recommendation(
+        ticker_symbol=ticker,
+        user_cash=cash_balance,
+        user_holdings=user_holdings,
+        historical_data=hist,
+        live_price=current_price,
+        fallback_used=fallback_used
+    )
+
+    if 'error' in recommendation_result:
+        return jsonify({'error': recommendation_result['error']}), 500
+    # Safely extract fields from recommendation_result (handle non-dict return types)
+    def _safe_get(obj, key, default=None):
+        try:
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, obj.get(key, default) if hasattr(obj, 'get') else default)
+        except Exception:
+            try:
+                return obj[key]
+            except Exception:
+                return default
+
+    predicted_price_5d = float(_safe_get(recommendation_result, 'predicted_price_5d', 0.0))
+    recommendation = _safe_get(recommendation_result, 'recommendation')
+    action = _safe_get(recommendation_result, 'action')
+    suggested_qty = int(_safe_get(recommendation_result, 'suggested_qty', _safe_get(recommendation_result, 'suggested_shares', 0) or 0))
+    # Backwards-compat: some callers used 'suggested_shares'
+    suggested_shares_alias = suggested_qty
+    reason = _safe_get(recommendation_result, 'reason')
+    confidence = int(_safe_get(recommendation_result, 'confidence', 0) or 0)
+    fallback_flag = bool(_safe_get(recommendation_result, 'fallback_used', False))
+    macd_signal = float(_safe_get(recommendation_result, 'macd_signal', 0.0) or 0.0)
+    forecast_series = _safe_get(recommendation_result, 'forecast_series', [])
+    price_change_pct = ((predicted_price_5d - current_price) / current_price) * 100.0
+
+    return jsonify({
+        'symbol': stock.ticker,
+        'name': company_name,
+        'sector': sector,
+        'price': float(current_price),
+        'change': float(change),
+        'change_pct': float(change_pct),
+        'volume': volume_val,
+        '52w_high': float(np.max(close_prices)),
+        '52w_low': float(np.min(close_prices)),
+        'history': history,
+        'indicators': {
+            'sma20': float(np.mean(close_prices[-20:])) if len(close_prices) >= 20 else float(np.mean(close_prices)),
+            'sma50': float(np.mean(close_prices[-50:])) if len(close_prices) >= 50 else float(np.mean(close_prices)),
+            'rsi': float(rsi_value),
+            'volatility': 'Medium'
+        },
+        'current_price': float(current_price),
+        'predicted_price_5d': predicted_price_5d,
+        'rsi': float(rsi_value),
+        'recommendation': recommendation,
+        'action': action,
+        'suggested_qty': suggested_qty,
+        'suggested_shares': suggested_shares_alias,
+        'macd_signal': macd_signal,
+        'reason': reason,
+        'confidence': confidence,
+        'fallback_used': fallback_flag,
+        'forecast_series': forecast_series,
+        'predicted_change_pct': float(price_change_pct)
+    })
+
 
 @api_bp.route('/portfolio/<int:user_id>', methods=['GET'])
 def get_portfolio(user_id):

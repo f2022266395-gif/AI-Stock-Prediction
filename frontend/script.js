@@ -909,7 +909,7 @@ async function switchDetailRange(range, el) {
 async function fetchStockDetailData(ticker, range) {
     range = range || 30;
     try {
-        const response = await fetch(`${API_BASE}/stocks/${ticker}?range=${range}`);
+        const response = await fetch(`${API_BASE}/predict/${ticker}?user_id=${currentUser.user_id}&range=${range}`);
         const data = await response.json();
         currentStock = data;
         
@@ -929,15 +929,50 @@ async function fetchStockDetailData(ticker, range) {
         changeTxt.className = isPositive ? 'green' : 'red';
         changePctTxt.className = isPositive ? 'green' : 'red';
 
-        // Signal
+        // Signal (use holding-aware `action` when available, fall back to `recommendation`)
         const banner = document.getElementById('detail-signal-banner');
-        if (data.change_pct > 0.5) {
-            banner.className = 'signal-banner buy';
-            document.getElementById('detail-signal-text').textContent = "BUY SIGNAL — Consistent uptrend detected.";
-        } else {
-            banner.className = 'signal-banner sell';
-            document.getElementById('detail-signal-text').textContent = "NEUTRAL SIGNAL — Market consolidation period.";
+        const action = data.action || data.recommendation || 'HOLD';
+        const changePct = data.predicted_change_pct ?? 0;
+        const rsiValue = data.rsi ?? 0;
+        const macdValue = data.macd_signal ?? 0;
+
+        let changeText = 'AI projects stable/sideways movement over the next 5 days.';
+        if (changePct > 0.2) {
+            changeText = `AI projects positive growth (+${changePct.toFixed(1)}%) over the next 5 days.`;
+        } else if (changePct < -0.2) {
+            changeText = `AI projects a downward correction (${changePct.toFixed(1)}%) over the next 5 days.`;
         }
+
+        let momentumText = 'Steady & Neutral';
+        if (rsiValue > 70) {
+            momentumText = 'Overheated (High Selling Pressure)';
+        } else if (rsiValue < 30) {
+            momentumText = 'Oversold (Great Buying Opportunity)';
+        } else if (rsiValue >= 55) {
+            momentumText = 'Moderately Strong Momentum';
+        } else if (rsiValue < 45) {
+            momentumText = 'Moderately Weak Momentum';
+        }
+
+        const trendText = macdValue >= 0 ? 'Upward Strength' : 'Downward Correction';
+        const bannerText = `${action} SIGNAL — ${changeText} Market Momentum: ${momentumText} | Trend Direction: ${trendText}`;
+
+        if (action === 'BUY') {
+            banner.className = 'signal-banner buy';
+        } else if (action === 'SELL') {
+            banner.className = 'signal-banner sell';
+        } else {
+            banner.className = 'signal-banner';
+        }
+        document.getElementById('detail-signal-text').textContent = bannerText;
+
+        // Prediction Panel
+        document.getElementById('detail-recommendation').textContent = action;
+        const suggestedQty = data.suggested_qty !== undefined ? data.suggested_qty : (data.suggested_shares !== undefined ? data.suggested_shares : 0);
+        document.getElementById('detail-suggested-shares').textContent = suggestedQty;
+        document.getElementById('detail-confidence').textContent = (data.confidence !== undefined ? `${data.confidence}%` : '—');
+        document.getElementById('detail-reason').textContent = (data.reason || '—');
+        document.getElementById('detail-predicted-price').textContent = `$${data.predicted_price_5d.toFixed(2)}`;
 
         // Stats & Indicators
         document.getElementById('ind-sma20').textContent = `$${data.indicators.sma20}`;
@@ -960,29 +995,53 @@ async function fetchStockDetailData(ticker, range) {
         updateEstimate();
 
         showView('stock-detail-view');
-        renderDetailChart(data.history);
+        renderDetailChart(data.history, data.forecast_series);
         lucide.createIcons();
     } catch (error) {
         console.error("Error loading stock detail:", error);
     }
 }
 
-function renderDetailChart(history) {
+function renderDetailChart(history, forecastSeries = []) {
     const ctx = document.getElementById('detail-history-chart').getContext('2d');
     if (detailChart) detailChart.destroy();
+
+    const labels = history.map(h => h.date);
+    const priceData = history.map(h => h.price);
+    const forecastLabels = [];
+    const forecastData = [];
+
+    if (forecastSeries && forecastSeries.length > 0) {
+        const lastDate = new Date(labels[labels.length - 1]);
+        for (let i = 1; i <= forecastSeries.length; i++) {
+            const nextDate = new Date(lastDate);
+            nextDate.setDate(nextDate.getDate() + i);
+            forecastLabels.push(nextDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
+            forecastData.push(forecastSeries[i - 1]);
+        }
+    }
 
     detailChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: history.map(h => h.date),
+            labels: [...labels, ...forecastLabels],
             datasets: [{
                 label: 'Price',
-                data: history.map(h => h.price),
+                data: [...priceData, ...Array(forecastLabels.length).fill(null)],
                 borderColor: '#2563eb',
                 borderWidth: 3,
                 pointRadius: 2,
                 backgroundColor: 'rgba(37, 99, 235, 0.1)',
                 fill: true,
+                tension: 0.3
+            }, {
+                label: 'Forecast',
+                data: [...Array(priceData.length).fill(null), ...forecastData],
+                borderColor: '#f59e0b',
+                borderWidth: 2,
+                pointRadius: 0,
+                borderDash: [8, 6],
+                fill: false,
                 tension: 0.3
             }]
         },

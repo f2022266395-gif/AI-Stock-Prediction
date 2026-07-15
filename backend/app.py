@@ -1,14 +1,10 @@
 from flask import Flask, send_from_directory
 from flask_cors import CORS
-from config import Config
-import os
-import sys
+from werkzeug.security import generate_password_hash
 
-# Ensure backend directory is in path for imports
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from models import db, User, Stock, Portfolio
-from routes import api_bp
+from .config import Config
+from .models import db, User, Stock, Portfolio
+from .routes import api_bp
 
 def create_app():
     app = Flask(__name__, static_folder=Config.STATIC_FOLDER)
@@ -56,6 +52,21 @@ if __name__ == '__main__':
                 Stock(ticker='XOM', company_name='Exxon Mobil Corporation', latest_price=110.00, sector='Energy')
             ]
             db.session.bulk_save_objects(stocks)
+            db.session.commit()
+
+        # Seed a demo user for endpoint verification
+        if User.query.count() == 0:
+            demo_user = User(
+                full_name='Demo User',
+                username='demo',
+                email='demo@example.com',
+                password_hash=generate_password_hash('demo1234'),
+                virtual_balance=10000.00
+            )
+            db.session.add(demo_user)
+            db.session.commit()
+            demo_portfolio = Portfolio(user_id=demo_user.user_id, cash_balance=10000.00)
+            db.session.add(demo_portfolio)
             db.session.commit()
             
     app.run(debug=True, port=5000)

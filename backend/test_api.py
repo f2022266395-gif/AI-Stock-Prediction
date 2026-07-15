@@ -1,6 +1,6 @@
-from app import create_app
-from models import db
-from routes.api import get_all_prices, get_market_news
+from backend.app import create_app
+from backend.models import db
+from backend.routes.api import get_all_prices, get_market_news
 
 app = create_app()
 with app.app_context():
