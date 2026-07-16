@@ -1,3 +1,11 @@
+import os
+import sys
+
+# Support running test_api.py directly or as a module by adding project root to sys.path
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
+
 from backend.app import create_app
 from backend.models import db
 from backend.routes.api import get_all_prices, get_market_news
@@ -15,7 +23,7 @@ with app.app_context():
     # Can't easily test this without running the full Flask app
     # But we can test the finnhub client directly
     import finnhub
-    from config import Config
+    from backend.config import Config
     finnhub_client = finnhub.Client(api_key=Config.FINNHUB_API_KEY)
     try:
         news = finnhub_client.general_news('general', min_id=0)

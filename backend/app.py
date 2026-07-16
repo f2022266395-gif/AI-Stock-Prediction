@@ -1,10 +1,17 @@
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash
+import os
+import sys
 
-from .config import Config
-from .models import db, User, Stock, Portfolio
-from .routes import api_bp
+# Support running app.py directly by adding the project root to sys.path
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
+
+from backend.config import Config
+from backend.models import db, User, Stock, Portfolio
+from backend.routes import api_bp
 
 def create_app():
     app = Flask(__name__, static_folder=Config.STATIC_FOLDER)

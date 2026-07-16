@@ -1,11 +1,9 @@
 from flask import Blueprint, jsonify, request
 from werkzeug.security import generate_password_hash, check_password_hash
 import finnhub
-import torch
 import numpy as np
 import pandas as pd
 import yfinance as yf
-from scipy.stats import linregress
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time, random
 from datetime import datetime, timedelta
@@ -13,22 +11,54 @@ from datetime import datetime, timedelta
 from ..config import Config
 from ..models import db, User, Stock, Portfolio, Holding, Transaction
 
-# Safe, defensive imports for Chronos
+# Safe, defensive imports for scipy
+LINREGRESS_AVAILABLE = False
+try:
+    from scipy.stats import linregress
+    LINREGRESS_AVAILABLE = True
+except Exception as e:
+    print(f"AI-Prediction WARNING: scipy.stats.linregress could not be loaded: {e}. Falling back to NumPy implementation.")
+
+def _safe_linregress(x, y):
+    if LINREGRESS_AVAILABLE:
+        try:
+            return linregress(x, y)
+        except Exception:
+            pass
+    # Custom simple linear regression using NumPy
+    n = len(x)
+    if n == 0:
+        return 0.0, 0.0, 0.0, 0.0, 0.0
+    x_mean = np.mean(x)
+    y_mean = np.mean(y)
+    num = np.sum((x - x_mean) * (y - y_mean))
+    den = np.sum((x - x_mean) ** 2)
+    slope = num / den if den != 0.0 else 0.0
+    intercept = y_mean - (slope * x_mean)
+    return slope, intercept, 0.0, 0.0, 0.0
+
+# Safe, defensive imports for Chronos & PyTorch
 CHRONOS_AVAILABLE = False
 ChronosClass = None
+torch = None
+
 try:
+    import torch
     from chronos import ChronosBoltPipeline
     ChronosClass = ChronosBoltPipeline
     CHRONOS_AVAILABLE = True
     print("AI-Prediction: Successfully loaded ChronosBoltPipeline")
-except ImportError:
-    try:
-        from chronos import ChronosPipeline
-        ChronosClass = ChronosPipeline
-        CHRONOS_AVAILABLE = True
-        print("AI-Prediction: Fallback loaded ChronosPipeline")
-    except ImportError as e:
-        print(f"AI-Prediction WARNING: Chronos pipelines not importable. Error: {e}")
+except Exception as e:
+    if torch is not None:
+        try:
+            from chronos import ChronosPipeline
+            ChronosClass = ChronosPipeline
+            CHRONOS_AVAILABLE = True
+            print("AI-Prediction: Fallback loaded ChronosPipeline")
+        except Exception as fallback_err:
+            print(f"AI-Prediction WARNING: Chronos pipelines not importable. Error: {fallback_err}")
+    else:
+        print(f"AI-Prediction WARNING: PyTorch could not be loaded, Chronos disabled. (This is normal if an Application Control policy blocks PyTorch dlls.) Error: {e}")
 
 # Initialize Finnhub Client
 finnhub_client = finnhub.Client(api_key=Config.FINNHUB_API_KEY)
@@ -128,7 +158,7 @@ def get_ensemble_recommendation(ticker_symbol, user_cash, user_holdings, histori
     regression_window = min(30, n_days)
     x = np.arange(regression_window)
     y = close_prices.iloc[-regression_window:].values
-    slope, intercept, _, _, _ = linregress(x, y)
+    slope, intercept, _, _, _ = _safe_linregress(x, y)
     regression_forecast = current_price + (slope * 5.0)
 
     # --- EMA Momentum ---
