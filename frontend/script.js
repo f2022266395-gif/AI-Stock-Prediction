@@ -1,5 +1,17 @@
 const API_BASE = 'http://localhost:5000/api';
 let currentUser = null;
+
+// Synchronously restore session from localStorage to prevent flash of guest navbar
+const cachedUserId = localStorage.getItem('user_id');
+if (cachedUserId) {
+    currentUser = {
+        user_id: parseInt(cachedUserId),
+        username: localStorage.getItem('username') || 'user',
+        full_name: localStorage.getItem('full_name') || '',
+        balance: parseFloat(localStorage.getItem('balance') || '0')
+    };
+}
+
 let performanceChart = null;
 let detailChart = null;
 let marketOverviewChart = null;
@@ -48,6 +60,13 @@ function showToast(message, type = 'success') {
 async function showView(viewId) {
     showAppLoader();
     currentView = viewId;
+    
+    // Save view history for seamless page refreshes (only protected/main dashboard views)
+    if (viewId !== 'auth-login' && viewId !== 'auth-register' && viewId !== 'home-view') {
+        localStorage.setItem('current_view', viewId);
+    } else {
+        localStorage.removeItem('current_view');
+    }
     
     document.querySelectorAll('.view').forEach(view => {
         view.classList.remove('active');
@@ -1656,7 +1675,13 @@ async function handleRegister(e) {
         if (response.ok) {
             e.target.reset();
             currentUser = data;
+            
+            // Cache session properties
             localStorage.setItem('user_id', data.user_id);
+            localStorage.setItem('username', data.username || '');
+            localStorage.setItem('full_name', data.full_name || '');
+            localStorage.setItem('balance', data.balance || 0);
+            
             showToast('Account created! Welcome to AI Stock Prediction.');
             showView('dashboard-view');
         } else {
@@ -1685,7 +1710,13 @@ async function handleLogin(e) {
         if (response.ok) {
             e.target.reset();
             currentUser = data;
+            
+            // Cache session properties
             localStorage.setItem('user_id', data.user_id);
+            localStorage.setItem('username', data.username || '');
+            localStorage.setItem('full_name', data.full_name || '');
+            localStorage.setItem('balance', data.balance || 0);
+            
             showToast('Login successful! Welcome back.');
             showView('dashboard-view');
         } else {
@@ -1696,31 +1727,70 @@ async function handleLogin(e) {
     }
 }
 
+async function handleLiveDemo() {
+    showAppLoader();
+    try {
+        const response = await fetch(`${API_BASE}/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: 'demo', password: 'demo1234' })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            currentUser = data;
+            
+            // Cache session properties
+            localStorage.setItem('user_id', data.user_id);
+            localStorage.setItem('username', data.username || '');
+            localStorage.setItem('full_name', data.full_name || '');
+            localStorage.setItem('balance', data.balance || 0);
+            
+            showToast('Welcome to the Live Demo!');
+            showView('dashboard-view');
+        } else {
+            showToast('Demo user not found. Redirecting to login.', 'error');
+            showView('auth-login');
+        }
+    } catch (error) {
+        showToast('Connection error. Redirecting to login.', 'error');
+        showView('auth-login');
+    }
+}
+
 function logout() {
     currentUser = null;
     localStorage.removeItem('user_id');
+    localStorage.removeItem('username');
+    localStorage.removeItem('full_name');
+    localStorage.removeItem('balance');
+    localStorage.removeItem('current_view');
     showView('home-view');
 }
 
 async function checkAuth() {
     const userId = localStorage.getItem('user_id');
+    const savedView = localStorage.getItem('current_view') || 'dashboard-view';
     if (userId) {
         try {
             const response = await fetch(`${API_BASE}/me/${userId}`);
             if (response.ok) {
-                currentUser = await response.json();
+                const userData = await response.json();
+                currentUser = userData;
                 
-                // If we are currently on the home view, redirect to dashboard
+                // Update session properties cache
+                localStorage.setItem('username', userData.username || '');
+                localStorage.setItem('full_name', userData.full_name || '');
+                localStorage.setItem('balance', userData.balance || 0);
+                
+                // If we are currently on the home/auth views, redirect to saved/default view
                 const homeView = document.getElementById('home-view');
                 if (homeView && homeView.classList.contains('active')) {
-                    showView('dashboard-view');
+                    showView(savedView);
                 } else {
                     updateNavbar();
                 }
             } else {
-                localStorage.removeItem('user_id');
-                currentUser = null;
-                updateNavbar();
+                logout();
             }
         } catch (e) {
             console.error("Auth check failed:", e);
@@ -2200,6 +2270,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Ensure loader is visible on start
     showAppLoader();
+    
+    // Update navbar synchronously based on cache to avoid flash of guest navbar
+    updateNavbar();
     
     // Auth Check
     await checkAuth();
