@@ -182,10 +182,10 @@ function getInitials(name) {
 // --- Dashboard Logic ---
 async function initDashboard() {
     try {
+        await fetchMarketOverview();
         await fetchDashboardSummary();
         await fetchRecentTransactions();
         await fetchPortfolioData();
-        await fetchMarketOverview();
         
         renderMarketSnapshot();
         renderDashMixStats();

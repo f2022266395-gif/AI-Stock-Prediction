@@ -67,6 +67,8 @@ finnhub_client = finnhub.Client(api_key=Config.FINNHUB_API_KEY)
 _price_cache = {}
 _cache_ttl = 25  # seconds
 
+_simulated_prices = {}  # {ticker: {price, timestamp}}
+
 def _fetch_single_quote(ticker, latest_db_price):
     try:
         quote = finnhub_client.quote(ticker)
@@ -78,10 +80,31 @@ def _fetch_single_quote(ticker, latest_db_price):
             }
     except Exception:
         pass
+    
+    # Simulation fallback: random walk when Finnhub is unavailable
+    now = time.time()
+    prev = _simulated_prices.get(ticker)
+    
+    # If we have a recent simulated price, continue the walk from there
+    if prev and (now - prev['timestamp']) < 300:
+        base_price = prev['price']
+    else:
+        base_price = float(latest_db_price)
+    
+    # Random walk with ~0.3% standard deviation
+    drift = np.random.normal(0, 0.003) * base_price
+    new_price = round(base_price + drift, 2)
+    new_price = max(new_price, 0.01)
+    
+    change = round(new_price - float(latest_db_price), 2)
+    change_pct = round((change / float(latest_db_price)) * 100, 2) if float(latest_db_price) > 0 else 0
+    
+    _simulated_prices[ticker] = {'price': new_price, 'timestamp': now}
+    
     return ticker, {
-        'price': latest_db_price,
-        'change': 0,
-        'change_pct': 0
+        'price': new_price,
+        'change': change,
+        'change_pct': change_pct
     }
 
 def _get_cached_price(ticker, fallback):
