@@ -35,6 +35,61 @@ let currentView = 'home-view';
 let dashOverviewPage = 1;
 const dashOverviewItemsPerPage = 5;
 
+// --- Theme Management ---
+function getCSSVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function toggleTheme() {
+    const html = document.documentElement;
+    const current = html.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+}
+
+function applyTheme(theme) {
+    const html = document.documentElement;
+    const isDark = theme === 'dark';
+    
+    html.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    localStorage.setItem('theme', theme);
+    
+    const icon = isDark ? 'sun' : 'moon';
+    document.querySelectorAll('#theme-toggle-user i, #theme-toggle-guest i').forEach(el => {
+        el.setAttribute('data-lucide', icon);
+    });
+    if (window.lucide) lucide.createIcons();
+    
+    recreateActiveCharts();
+}
+
+function initTheme() {
+    const saved = localStorage.getItem('theme') || 'light';
+    applyTheme(saved);
+}
+
+function recreateActiveCharts() {
+    const activeView = document.querySelector('.view.active')?.id;
+    if (!activeView) return;
+    
+    if (activeView === 'dashboard-view') {
+        if (performanceChart) { performanceChart.destroy(); performanceChart = null; }
+        renderPerformanceChart();
+        if (dashAllocationChart) { dashAllocationChart.destroy(); dashAllocationChart = null; }
+        renderDashAllocationChart();
+    } else if (activeView === 'portfolio-view') {
+        if (portPerfChart) { portPerfChart.destroy(); portPerfChart = null; }
+        renderPortfolioPerformance();
+        if (allocationChart) { allocationChart.destroy(); allocationChart = null; }
+        if (dashboardHoldings.length > 0) {
+            renderAllocationChart(dashboardHoldings);
+        }
+    } else if (activeView === 'markets-view') {
+        if (marketOverviewChart) { marketOverviewChart.destroy(); marketOverviewChart = null; }
+        renderMarketOverviewChart();
+    }
+}
+
 // --- UI Components ---
 function showToast(message, type = 'success') {
     const container = document.getElementById('toast-container');
@@ -472,11 +527,11 @@ function renderPerformanceChart(days) {
             datasets: [{
                 label: 'Portfolio Value',
                 data: dataPoints,
-                borderColor: '#2563eb',
+                borderColor: getCSSVar('--accent-color'),
                 borderWidth: 3,
                 pointRadius: 0,
                 pointHoverRadius: 6,
-                backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                backgroundColor: getCSSVar('--accent-bg'),
                 fill: true,
                 tension: 0.4
             }]
@@ -489,10 +544,10 @@ function renderPerformanceChart(days) {
                 tooltip: {
                     mode: 'index',
                     intersect: false,
-                    backgroundColor: '#ffffff',
-                    titleColor: '#64748b',
-                    bodyColor: '#1e293b',
-                    borderColor: 'rgba(0,0,0,0.1)',
+                    backgroundColor: getCSSVar('--card-bg'),
+                    titleColor: getCSSVar('--text-secondary'),
+                    bodyColor: getCSSVar('--text-primary'),
+                    borderColor: getCSSVar('--border-color'),
                     borderWidth: 1,
                     displayColors: false,
                     callbacks: {
@@ -504,15 +559,15 @@ function renderPerformanceChart(days) {
             },
             scales: {
                 y: {
-                    grid: { color: 'rgba(0, 0, 0, 0.06)', drawBorder: false },
+                    grid: { color: getCSSVar('--chart-grid'), drawBorder: false },
                     ticks: {
-                        color: '#64748b',
+                        color: getCSSVar('--chart-text'),
                         callback: value => '$' + (value / 1000) + 'k'
                     }
                 },
                 x: {
                     grid: { display: false },
-                    ticks: { color: '#64748b' }
+                    ticks: { color: getCSSVar('--chart-text') }
                 }
             }
         }
@@ -585,7 +640,7 @@ function renderDashAllocationChart() {
                 labels: ['No Holdings'],
                 datasets: [{
                     data: [1],
-                    backgroundColor: ['rgba(0,0,0,0.06)'],
+                    backgroundColor: [getCSSVar('--alloc-bar-bg')],
                     borderWidth: 0
                 }]
             },
@@ -599,7 +654,7 @@ function renderDashAllocationChart() {
         return;
     }
 
-    const colors = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed', '#db2777', '#0891b2', '#84cc16', '#14b8a6', '#f97316'];
+    const colors = [getCSSVar('--accent-color'), getCSSVar('--success'), getCSSVar('--warning'), getCSSVar('--danger'), '#7c3aed', '#db2777', '#0891b2', '#84cc16', '#14b8a6', '#f97316'];
     dashAllocationChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
@@ -608,7 +663,7 @@ function renderDashAllocationChart() {
                 data: holdings.map(h => h.quantity * h.current_price),
                 backgroundColor: colors.slice(0, holdings.length),
                 borderWidth: 2,
-                borderColor: '#ffffff'
+                borderColor: getCSSVar('--card-bg')
             }]
         },
         options: {
@@ -619,7 +674,7 @@ function renderDashAllocationChart() {
                 legend: {
                     position: 'bottom',
                     labels: {
-                        color: '#64748b',
+                        color: getCSSVar('--chart-text'),
                         usePointStyle: true,
                         padding: 12,
                         font: { size: 10 }
@@ -774,7 +829,7 @@ function renderMarketOverviewChart() {
                 {
                     label: 'Price',
                     data: priceData,
-                    backgroundColor: '#2563eb',
+                    backgroundColor: getCSSVar('--accent-color'),
                     borderRadius: 4,
                     yAxisID: 'y',
                     order: 2
@@ -783,9 +838,9 @@ function renderMarketOverviewChart() {
                     label: 'Change %',
                     data: changeData,
                     type: 'line',
-                    borderColor: '#059669',
-                    backgroundColor: 'rgba(5, 150, 105, 0.1)',
-                    pointBackgroundColor: changeData.map(v => v >= 0 ? '#059669' : '#dc2626'),
+                    borderColor: getCSSVar('--success'),
+                    backgroundColor: getCSSVar('--success-bg'),
+                    pointBackgroundColor: changeData.map(v => v >= 0 ? getCSSVar('--success') : getCSSVar('--danger')),
                     pointRadius: 4,
                     borderWidth: 2,
                     tension: 0.3,
@@ -803,7 +858,7 @@ function renderMarketOverviewChart() {
                     display: true,
                     position: 'top',
                     labels: {
-                        color: '#64748b',
+                        color: getCSSVar('--chart-text'),
                         usePointStyle: true,
                         boxWidth: 8,
                         padding: 15,
@@ -813,10 +868,10 @@ function renderMarketOverviewChart() {
                 tooltip: {
                     mode: 'index',
                     intersect: false,
-                    backgroundColor: '#ffffff',
-                    titleColor: '#64748b',
-                    bodyColor: '#1e293b',
-                    borderColor: 'rgba(0,0,0,0.1)',
+                    backgroundColor: getCSSVar('--card-bg'),
+                    titleColor: getCSSVar('--text-secondary'),
+                    bodyColor: getCSSVar('--text-primary'),
+                    borderColor: getCSSVar('--border-color'),
                     borderWidth: 1,
                     displayColors: true
                 }
@@ -824,9 +879,9 @@ function renderMarketOverviewChart() {
             scales: {
                 y: {
                     position: 'left',
-                    grid: { color: 'rgba(0, 0, 0, 0.06)', drawBorder: false },
+                    grid: { color: getCSSVar('--chart-grid'), drawBorder: false },
                     ticks: {
-                        color: '#64748b',
+                        color: getCSSVar('--chart-text'),
                         font: { size: 10 },
                         callback: value => '$' + value.toFixed(0)
                     }
@@ -835,14 +890,14 @@ function renderMarketOverviewChart() {
                     position: 'right',
                     grid: { display: false },
                     ticks: {
-                        color: '#64748b',
+                        color: getCSSVar('--chart-text'),
                         font: { size: 10 },
                         callback: value => value.toFixed(1) + '%'
                     }
                 },
                 x: {
                     grid: { display: false },
-                    ticks: { color: '#64748b', font: { size: 10 } }
+                    ticks: { color: getCSSVar('--chart-text'), font: { size: 10 } }
                 }
             }
         }
@@ -1047,10 +1102,10 @@ function renderDetailChart(history, forecastSeries = []) {
             datasets: [{
                 label: 'Price',
                 data: [...priceData, ...Array(forecastLabels.length).fill(null)],
-                borderColor: '#2563eb',
+                borderColor: getCSSVar('--accent-color'),
                 borderWidth: 3,
                 pointRadius: 2,
-                backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                backgroundColor: getCSSVar('--accent-bg'),
                 fill: true,
                 tension: 0.3
             }, {
@@ -1069,8 +1124,8 @@ function renderDetailChart(history, forecastSeries = []) {
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-                y: { grid: { color: 'rgba(0, 0, 0, 0.06)' }, ticks: { color: '#64748b' } },
-                x: { grid: { display: false }, ticks: { color: '#64748b' } }
+                y: { grid: { color: getCSSVar('--chart-grid') }, ticks: { color: getCSSVar('--chart-text') } },
+                x: { grid: { display: false }, ticks: { color: getCSSVar('--chart-text') } }
             }
         }
     });
@@ -1239,7 +1294,7 @@ function renderAllocationChart(holdings) {
     const ctx = document.getElementById('allocationChart').getContext('2d');
     if (allocationChart) allocationChart.destroy();
 
-    const colors = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed', '#db2777', '#0891b2', '#84cc16', '#14b8a6', '#f97316'];
+    const colors = [getCSSVar('--accent-color'), getCSSVar('--success'), getCSSVar('--warning'), getCSSVar('--danger'), '#7c3aed', '#db2777', '#0891b2', '#84cc16', '#14b8a6', '#f97316'];
 
     if (holdings.length === 0) {
         allocationChart = new Chart(ctx, {
@@ -1248,7 +1303,7 @@ function renderAllocationChart(holdings) {
                 labels: ['No Holdings'],
                 datasets: [{
                     data: [1],
-                    backgroundColor: ['rgba(0,0,0,0.06)'],
+                    backgroundColor: [getCSSVar('--alloc-bar-bg')],
                     borderWidth: 0
                 }]
             },
@@ -1259,7 +1314,7 @@ function renderAllocationChart(holdings) {
                 plugins: {
                     legend: {
                         position: 'bottom',
-                        labels: { color: '#64748b', usePointStyle: true, padding: 20 }
+                        labels: { color: getCSSVar('--chart-text'), usePointStyle: true, padding: 20 }
                     }
                 }
             }
@@ -1275,7 +1330,7 @@ function renderAllocationChart(holdings) {
                 data: holdings.map(h => h.quantity * h.current_price),
                 backgroundColor: colors.slice(0, holdings.length),
                 borderWidth: 2,
-                borderColor: '#ffffff',
+                borderColor: getCSSVar('--card-bg'),
                 hoverOffset: 12
             }]
         },
@@ -1284,12 +1339,12 @@ function renderAllocationChart(holdings) {
             maintainAspectRatio: false,
             cutout: '70%',
             plugins: {
-                legend: { position: 'bottom', labels: { color: '#64748b', usePointStyle: true, padding: 20, font: { size: 11 } } },
+                legend: { position: 'bottom', labels: { color: getCSSVar('--chart-text'), usePointStyle: true, padding: 20, font: { size: 11 } } },
                 tooltip: {
-                    backgroundColor: '#ffffff',
-                    titleColor: '#64748b',
-                    bodyColor: '#1e293b',
-                    borderColor: 'rgba(0,0,0,0.1)',
+                    backgroundColor: getCSSVar('--card-bg'),
+                    titleColor: getCSSVar('--text-secondary'),
+                    bodyColor: getCSSVar('--text-primary'),
+                    borderColor: getCSSVar('--border-color'),
                     borderWidth: 1,
                     callbacks: {
                         label: function(context) {
@@ -1337,10 +1392,10 @@ function renderPortfolioPerformance(days) {
             datasets: [{
                 label: 'Total Value',
                 data: dataPoints,
-                borderColor: '#059669',
+                borderColor: getCSSVar('--success'),
                 borderWidth: 3,
                 pointRadius: 3,
-                backgroundColor: 'rgba(5, 150, 105, 0.1)',
+                backgroundColor: getCSSVar('--success-bg'),
                 fill: true,
                 tension: 0.4
             }]
@@ -1350,8 +1405,8 @@ function renderPortfolioPerformance(days) {
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-                y: { grid: { color: 'rgba(0, 0, 0, 0.06)' }, ticks: { color: '#64748b' } },
-                x: { grid: { display: false }, ticks: { color: '#64748b' } }
+                y: { grid: { color: getCSSVar('--chart-grid') }, ticks: { color: getCSSVar('--chart-text') } },
+                x: { grid: { display: false }, ticks: { color: getCSSVar('--chart-text') } }
             }
         }
     });
@@ -2266,6 +2321,7 @@ function switchMoverTab(tab) {
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', async () => {
     // Initial UI Setup
+    initTheme();
     if (window.lucide) lucide.createIcons();
     
     // Ensure loader is visible on start

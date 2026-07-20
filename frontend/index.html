@@ -56,6 +56,9 @@
         </div>
 
         <div class="nav-links" id="guest-nav">
+            <button onclick="toggleTheme()" class="btn-icon-only" id="theme-toggle-guest" title="Toggle theme">
+                <i data-lucide="moon"></i>
+            </button>
             <a href="#" onclick="showView('auth-login')" class="nav-link">Login</a>
             <button onclick="showView('auth-register')" class="btn btn-primary">Get Started</button>
         </div>
@@ -64,6 +67,9 @@
                 <div class="avatar" id="nav-user-initials">JS</div>
                 <span id="nav-user-full-name">John Doe</span>
             </div>
+            <button onclick="toggleTheme()" class="btn-icon-only" id="theme-toggle-user" title="Toggle theme">
+                <i data-lucide="moon"></i>
+            </button>
             <button onclick="logout()" class="btn-logout">
                 <i data-lucide="log-out"></i> Logout
             </button>
