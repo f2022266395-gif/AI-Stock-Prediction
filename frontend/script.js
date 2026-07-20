@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = '/api';
 let currentUser = null;
 
 // Synchronously restore session from localStorage to prevent flash of guest navbar

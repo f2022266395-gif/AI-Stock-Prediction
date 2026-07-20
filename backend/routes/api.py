@@ -373,7 +373,7 @@ def register():
         return jsonify({'error': 'Username already exists'}), 400
     if User.query.filter_by(email=data['email']).first():
         return jsonify({'error': 'Email already exists'}), 400
-    hashed_password = generate_password_hash(data['password'])
+    hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
     new_user = User(
         full_name=data.get('full_name'),
         username=data['username'],
@@ -864,7 +864,7 @@ def update_password(user_id):
     if not check_password_hash(user.password_hash, current_password):
         return jsonify({'error': 'Incorrect current password'}), 401
         
-    user.password_hash = generate_password_hash(new_password)
+    user.password_hash = generate_password_hash(new_password, method='pbkdf2:sha256')
     db.session.commit()
     
     return jsonify({'message': 'Password updated successfully'})

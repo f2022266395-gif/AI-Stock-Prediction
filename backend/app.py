@@ -67,7 +67,7 @@ if __name__ == '__main__':
                 full_name='Demo User',
                 username='demo',
                 email='demo@example.com',
-                password_hash=generate_password_hash('demo1234'),
+                password_hash=generate_password_hash('demo1234', method='pbkdf2:sha256'),
                 virtual_balance=10000.00
             )
             db.session.add(demo_user)
