@@ -6,3 +6,5 @@ pandas
 python-dotenv
 finnhub-python
 scipy
+gunicorn
+psycopg2-binary

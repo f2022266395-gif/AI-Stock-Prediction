@@ -36,10 +36,10 @@ def create_app():
 
 app = create_app()
 
-if __name__ == '__main__':
+# Initialize DB and seed data on startup (runs for both dev and gunicorn)
+def _init_db():
     with app.app_context():
         db.create_all()
-        # Data seeding logic
         if Stock.query.count() == 0:
             stocks = [
                 Stock(ticker='AAPL', company_name='Apple Inc.', latest_price=175.50, sector='Technology'),
@@ -61,7 +61,6 @@ if __name__ == '__main__':
             db.session.bulk_save_objects(stocks)
             db.session.commit()
 
-        # Seed a demo user for endpoint verification
         if User.query.count() == 0:
             demo_user = User(
                 full_name='Demo User',
@@ -75,5 +74,8 @@ if __name__ == '__main__':
             demo_portfolio = Portfolio(user_id=demo_user.user_id, cash_balance=10000.00)
             db.session.add(demo_portfolio)
             db.session.commit()
-            
+
+_init_db()
+
+if __name__ == '__main__':
     app.run(debug=True, port=5001)
