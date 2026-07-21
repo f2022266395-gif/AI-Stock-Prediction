@@ -36,8 +36,13 @@ def create_app():
 
 app = create_app()
 
-# Initialize DB and seed data on startup (runs for both dev and gunicorn)
+# Lazy DB init — run on first request to avoid cold-start timeouts
+_db_initialized = False
+
 def _init_db():
+    global _db_initialized
+    if _db_initialized:
+        return
     with app.app_context():
         db.create_all()
         if Stock.query.count() == 0:
@@ -74,11 +79,19 @@ def _init_db():
             demo_portfolio = Portfolio(user_id=demo_user.user_id, cash_balance=10000.00)
             db.session.add(demo_portfolio)
             db.session.commit()
+    _db_initialized = True
 
-try:
-    _init_db()
-except Exception as e:
-    print(f"WARNING: DB init failed (will retry on first request): {e}")
+@app.before_request
+def ensure_db_initialized():
+    if not _db_initialized:
+        try:
+            print("Lazy DB init on first request...")
+            _init_db()
+            print("Lazy DB init done")
+        except Exception as e:
+            print(f"DB init error on request: {e}")
+            import traceback
+            traceback.print_exc()
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
