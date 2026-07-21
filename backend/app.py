@@ -24,6 +24,10 @@ def create_app():
     app.register_blueprint(api_bp, url_prefix='/api')
     
     # Serve Frontend
+    @app.route('/health')
+    def health():
+        return {'status': 'ok'}
+
     @app.route('/')
     def index():
         return send_from_directory(app.static_folder, 'index.html')
