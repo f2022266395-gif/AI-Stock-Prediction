@@ -75,7 +75,10 @@ def _init_db():
             db.session.add(demo_portfolio)
             db.session.commit()
 
-_init_db()
+try:
+    _init_db()
+except Exception as e:
+    print(f"WARNING: DB init failed (will retry on first request): {e}")
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)

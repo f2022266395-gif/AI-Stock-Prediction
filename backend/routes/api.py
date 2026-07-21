@@ -60,8 +60,15 @@ except Exception as e:
     else:
         print(f"AI-Prediction WARNING: PyTorch could not be loaded, Chronos disabled. (This is normal if an Application Control policy blocks PyTorch dlls.) Error: {e}")
 
-# Initialize Finnhub Client
-finnhub_client = finnhub.Client(api_key=Config.FINNHUB_API_KEY)
+# Initialize Finnhub Client (safe startup)
+finnhub_client = None
+if Config.FINNHUB_API_KEY:
+    try:
+        finnhub_client = finnhub.Client(api_key=Config.FINNHUB_API_KEY)
+    except Exception as e:
+        print(f"WARNING: Finnhub client init failed: {e}")
+else:
+    print("WARNING: No FINNHUB_API_KEY set, Finnhub features disabled")
 
 # Price cache: {ticker: {price, change, change_pct, timestamp}}
 _price_cache = {}
